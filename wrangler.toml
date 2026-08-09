@@ -1,0 +1,22 @@
+name = "kilat"
+main = "src/worker.ts"
+compatibility_date = "2025-07-01"
+compatibility_flags = ["nodejs_compat"]
+
+[vars]
+NODE_ENV = "production"
+APP_URL = "https://kilat.bisnis-maulanashalihin.workers.dev"
+SSR = "true"
+MAIL_DRIVER = "log"
+MAIL_FROM = "no-reply@example.com"
+[[d1_databases]]
+binding = "DB"
+database_id = "bd0f2555-332c-4a2c-bd56-7fae6827de87"
+database_name = "kilat"
+migrations_dir = "migrations"
+
+[assets]
+directory = "./dist"
+binding = "ASSETS"
+not_found_handling = "none"
+run_worker_first = ["/*", "!/assets/*"]

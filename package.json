@@ -1,0 +1,54 @@
+{
+  "name": "kilat",
+  "version": "0.1.0",
+  "license": "MIT",
+  "description": "Full-stack edge starter: Hono + Cloudflare D1 + Inertia v3 (React 19) with auth, roles, SSR, migrations and Workers.",
+  "keywords": [
+    "kilat",
+    "hono",
+    "cloudflare",
+    "cloudflare-workers",
+    "d1",
+    "inertia",
+    "react",
+    "edge",
+    "boilerplate",
+    "ssr"
+  ],
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/maulanashalihin/kilat.git"
+  },
+  "engines": {},
+  "private": false,
+  "type": "module",
+  "module": "src/worker.ts",
+  "scripts": {
+    "dev": "wrangler dev",
+    "build": "bun run scripts/build.ts",
+    "deploy": "wrangler deploy",
+    "db:migrate": "wrangler d1 migrations apply kilat --local",
+    "db:migrate:remote": "wrangler d1 migrations apply kilat --remote",
+    "db:seed": "bun run scripts/seed.ts",
+    "typecheck": "tsc --noEmit",
+    "lint": "biome lint src tests scripts",
+    "test": "bun test --isolate"
+  },
+  "dependencies": {
+    "@inertiajs/react": "^3.0.0",
+    "@sinclair/typebox": "^0.34.52",
+    "hono": "^4.13.0",
+    "react": "^19.0.0",
+    "react-dom": "^19.0.0"
+  },
+  "devDependencies": {
+    "@biomejs/biome": "^2.5.7",
+    "@cloudflare/workers-types": "^5.20260809.1",
+    "@types/bun": "^1.2.0",
+    "@types/react": "^19.0.0",
+    "@types/react-dom": "^19.0.0",
+    "esbuild": "^0.28.2",
+    "typescript": "^5.8.0",
+    "wrangler": "^4.120.0"
+  }
+}
