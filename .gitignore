@@ -10,3 +10,5 @@ data/uploads/
 .llm-wiki/meta/
 .wrangler/
 .svelte-css-cache/
+src/client/.tailwind.css
+create-kilat/bun.lock
