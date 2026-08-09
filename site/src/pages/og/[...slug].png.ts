@@ -20,7 +20,7 @@ const ROOT = process.cwd();
  * Brand URL shown in OG images. Derived from `site` in astro.config.mjs.
  * When you fork Kilat and change the domain, this updates automatically.
  */
-const SITE_URL = process.env.SITE_URL ?? "https://kilat.pages.dev";
+const SITE_URL = process.env.SITE_URL ?? "https://kilatjs.pages.dev";
 const BRAND_URL = new URL(SITE_URL).hostname.replace(/^www\./, "");
 const WIDTH = 1200;
 const HEIGHT = 630;
