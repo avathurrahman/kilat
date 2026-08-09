@@ -43,6 +43,7 @@
   "devDependencies": {
     "@biomejs/biome": "^2.5.7",
     "@cloudflare/workers-types": "^5.20260809.1",
+    "@tailwindcss/cli": "^4.3.3",
     "@types/bun": "^1.2.0",
     "@vue/compiler-sfc": "^3.5.41",
     "esbuild": "^0.28.2",

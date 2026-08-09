@@ -7,8 +7,9 @@
 import { createInertiaApp } from "@inertiajs/vue3";
 import type { DefineComponent } from "vue";
 import { createApp, createSSRApp, h } from "vue";
-import "./styles.css"; // global base: tokens, reset, shared UI primitives
 import { notFoundPage, pages } from "./pages";
+import "./.tailwind.css"; // Tailwind output (preflight + utilities)
+import "./styles.css"; // custom CSS (overrides Tailwind via cascade)
 
 createInertiaApp({
 	id: "app",
@@ -21,6 +22,7 @@ createInertiaApp({
 		});
 		app.use(plugin);
 		app.mount(el);
+		return app;
 	},
 	title: (title: string) =>
 		title ? `${title} — Kilat` : "Kilat",

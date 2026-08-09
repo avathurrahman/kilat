@@ -9,3 +9,4 @@ data/uploads/
 *.png
 .llm-wiki/meta/
 .wrangler/
+src/client/.tailwind.css

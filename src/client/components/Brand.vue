@@ -5,9 +5,12 @@ const props = defineProps<{ href: string; class?: string }>();
 </script>
 
 <template>
-	<Link :href="props.href" :class="['brand', props.class]">
+	<Link
+		:href="props.href"
+		:class="`inline-flex items-center gap-2 font-bold text-text tracking-tight hover:no-underline ${props.class ?? ''}`"
+	>
 		<svg
-			class="brand-mark"
+			class="text-primary shrink-0"
 			viewBox="0 0 32 32"
 			width="28"
 			height="28"
@@ -20,29 +23,3 @@ const props = defineProps<{ href: string; class?: string }>();
 		<span>Kilat</span>
 	</Link>
 </template>
-
-<style scoped>
-.brand {
-	display: inline-flex;
-	align-items: center;
-	gap: 0.5rem;
-	font-weight: 700;
-	font-size: 1.05rem;
-	color: var(--text);
-	letter-spacing: -0.01em;
-}
-
-.brand:hover {
-	text-decoration: none;
-}
-
-.brand-mark {
-	color: var(--primary);
-	flex-shrink: 0;
-}
-
-.brand em {
-	color: var(--primary);
-	font-style: normal;
-}
-</style>

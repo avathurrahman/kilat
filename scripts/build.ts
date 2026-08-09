@@ -1,7 +1,8 @@
 /**
- * Client asset build for Cloudflare Workers (Vue template).
+ * Client asset build for Cloudflare Workers (Vue + Tailwind template).
  *
- * Two esbuild passes:
+ * Three steps:
+ *   0. Tailwind v4 CLI: compile tailwind.css → .tailwind.css (preflight + utilities)
  *   1. Client bundle: Vue SFCs compiled for browser
  *      → dist/assets/app-[hash].js + CSS
  *   2. SSR bundle: Vue SFCs compiled for server-side rendering
@@ -19,6 +20,7 @@
 import { createHash } from "node:crypto";
 import { existsSync, mkdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
+import { $ } from "bun";
 import esbuild from "esbuild";
 import { vuePlugin } from "./vue-plugin";
 
@@ -37,6 +39,9 @@ async function buildClientAssets(): Promise<void> {
   if (existsSync(DIST_DIR)) rmSync(DIST_DIR, { recursive: true });
   mkdirSync(ASSETS_DIR, { recursive: true });
 
+  // 0. Compile Tailwind v4 → static CSS (no PostCSS needed).
+  // Produces src/client/.tailwind.css which app.ts imports.
+  await $`bunx @tailwindcss/cli -i src/client/tailwind.css -o src/client/.tailwind.css --minify`.quiet();
   // 1. Client bundle: Vue SFCs compiled for browser.
   const clientResult = await esbuild.build({
     entryPoints: ["src/client/app.ts"],
