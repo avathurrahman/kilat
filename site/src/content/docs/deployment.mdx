@@ -1,0 +1,67 @@
+---
+title: Deployment
+description: Deploy Kilat to 300+ Cloudflare edge locations with three commands.
+---
+
+Kilat deploys to **Cloudflare Workers** — serverless, no Docker, no VPS, no
+load balancer to configure. Your app runs across 300+ edge locations
+automatically.
+
+## The three-command deploy
+
+```sh
+# 1. Build the client bundle (esbuild → dist/)
+bun run build
+
+# 2. Apply D1 migrations to the remote database
+wrangler d1 migrations apply kilat --remote
+
+# 3. Deploy the Worker
+wrangler deploy
+```
+
+That's it. `wrangler deploy` uploads the Worker bundle and routes traffic
+globally within seconds.
+
+## What happens at the edge
+
+- **Worker** — your Hono app runs at the nearest of 300+ Cloudflare locations
+  to each visitor. No cold starts in the traditional sense; Workers isolate
+  startup is sub-millisecond.
+- **D1** — your SQLite database replicates read-only copies to the nearest
+  edge. Writes go to the primary, reads hit the local replica — low latency
+  without managing replicas yourself.
+- **Static assets** — `dist/` is served via the Workers Static Assets binding
+  (`env.ASSETS`). `run_worker_first = ["/*", "!/assets/*"]` means `/assets/*`
+  bypass the Worker entirely for maximum speed; everything else hits your app
+  first.
+
+## No Docker, no VPS
+
+There is no container to build, no server to provision, no process manager to
+keep alive. Wrangler handles upload and global distribution. You never SSH into
+anything.
+
+## Before you deploy
+
+1. **Set your secrets** — `wrangler secret put` for `RESEND_API_KEY`,
+   `GOOGLE_CLIENT_ID`, `GOOGLE_CLIENT_SECRET`, etc. See
+   [Configuration](./configuration).
+2. **Set `APP_URL`** in `wrangler.toml` `[vars]` to your production URL — it
+   drives email links and OAuth redirect URIs.
+3. **Set `NODE_ENV = "production"`** — enables `secure` cookies and production
+   behavior.
+4. **Run migrations** with `--remote` (not `--local`) — your local D1 is a
+   separate database.
+
+## Deploying updates
+
+Re-run the same three commands. Wrangler handles atomic swaps — in-flight
+requests finish on the old version, new requests hit the new one. Migrations
+are forward-only; never edit an applied migration (see
+[Schema & migrations](./database/schema-migrations)).
+
+## Custom domain
+
+Want `https://yourdomain.com` instead of `*.workers.dev`? See
+[Custom domain](./custom-domain).

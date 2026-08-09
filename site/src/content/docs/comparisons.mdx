@@ -1,0 +1,98 @@
+---
+title: Kilat vs. other frameworks
+description: How Kilat compares to meta-frameworks, Dulak, and Laravel — and the reasoning behind each choice.
+---
+
+Kilat is not a meta-framework. It's an edge-native boilerplate — a skeleton
+that already works, wired with the guardrails a deployed app needs. Here's how
+it compares to the alternatives, and the reasoning behind each choice.
+
+## Kilat vs Next.js / Nuxt / SvelteKit
+
+Meta-frameworks give you a batteries-included runtime with conventions,
+routing, and rendering abstractions. Kilat gives you the same outcome — a
+full-stack app with SSR, auth, and migrations — but as **explicit, readable
+code you own**, not a framework you depend on.
+
+| | Kilat | Meta-frameworks |
+| --- | --- | --- |
+| What it is | Edge-native boilerplate | Framework with conventions |
+| Routing | Hono routes, inline handlers | File-based routing abstraction |
+| Rendering | Inertia v3 + in-process SSR | Framework rendering pipeline |
+| Database | D1, raw prepared statements | ORM / adapter layer |
+| Deploy | `wrangler deploy` | Platform-specific (Vercel, etc.) |
+| Lock-in | None — it's your code | Framework opinions + platform |
+
+The tradeoff: meta-frameworks handle more for you, but you learn *their*
+abstractions. Kilat handles less, but what's there is plain TypeScript you can
+read end to end. When something breaks, you grep your own code — not framework
+internals.
+
+## Kilat vs Dulak
+
+[Dulak](https://github.com/maulanashalihin/dulak) is the Bun version of the
+same philosophy. Same deliberately-boring, zero-ops ethos; different runtime
+forces different tradeoffs:
+
+| | Kilat | Dulak |
+| --- | --- | --- |
+| Runtime | Cloudflare Workers (serverless edge) | Bun (single process) |
+| Database | D1 (async SQLite at the edge) | `bun:sqlite` (sync, local) |
+| Password hashing | PBKDF2 / Web Crypto (100K cap) | argon2 |
+| Build | esbuild (client + SSR) | `Bun.build` |
+| Deploy | `wrangler deploy` (edge, 300+ locations) | Docker / VPS |
+| Config | `wrangler.toml` `[vars]` | `.env` |
+| Rate limiting | no-op stub (stateless isolates) | in-memory Map |
+| Uploads | not included | tus-based uploads |
+| Compression | Wrangler auto-compresses | custom compress middleware |
+
+Pick Kilat if you want zero ops and global edge latency. Pick Dulak if you want
+a single long-lived process, sync DB access, and argon2.
+
+## Kilat vs Laravel
+
+Laravel is the gold standard for batteries-included PHP web apps. Kilat brings
+the same "it just works" ergonomics — auth, sessions, CSRF, migrations, mail —
+to TypeScript on the edge:
+
+| | Kilat | Laravel |
+| --- | --- | --- |
+| Language | TypeScript | PHP |
+| Runtime | Cloudflare Workers (edge) | PHP-FPM / Octane |
+| Database | D1 (SQLite at the edge) | MySQL / Postgres |
+| ORM | none — raw prepared statements | Eloquent |
+| Deploy | `wrangler deploy` | Server + web server |
+| Latency | 300+ edge locations | Single region |
+
+## Why no ORM
+
+Every dependency is a liability. D1 is async SQLite with a small, stable API:
+`prepare().bind().first/all/run`. Raw parameterized queries are obviously
+correct, type-checkable, and add zero upgrade surface. When your queries fit
+in one `db.ts` file — and they do for a long time — an ORM is overhead you
+pay for every upgrade. Add one when you genuinely need it; Kilat doesn't
+prescribe it.
+
+## Why PBKDF2, not argon2
+
+Workers limits PBKDF2 to **100K iterations** — the OWASP-recommended 600K
+throws `NotSupportedError`. 100K is still OWASP-acceptable for
+PBKDF2-HMAC-SHA256. argon2 needs `node:crypto`, which isn't available on
+Workers (and `nodejs_compat` doesn't cover it). Web Crypto's `crypto.subtle`
+is the native option, so that's what Kilat uses. Dulak, running on Bun, uses
+argon2 — the runtime decides.
+
+## Why D1, not Postgres
+
+D1 is SQLite at the edge: read replicas automatically serve from the nearest
+location, writes go to the primary. For a starter, that's the right default —
+zero connection pooling, zero external service, zero cost on the free tier.
+When you outgrow SQLite (heavy write concurrency, advanced types), bring your
+own Postgres via Hyperdrive. Kilat doesn't prescribe it; the `db.ts` boundary
+makes swapping the data layer a contained change.
+
+## Next steps
+
+- [Philosophy](/philosophy/) — the principles behind these tradeoffs.
+- [Architecture overview](/architecture/overview/) — how the choices shape the code.
+- [Configuration](/deployment/configuration/) — the full env var reference.

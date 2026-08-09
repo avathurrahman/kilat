@@ -1,0 +1,94 @@
+---
+title: Local development
+description: Local D1 via Wrangler/Miniflare, rebuilding the DB, and seeding a demo user.
+---
+
+Kilat runs locally through **Wrangler** (Miniflare), which provides a
+Workers-compatible runtime and a local D1 database — no Cloudflare account
+needed for development.
+
+## Start the dev server
+
+```sh
+bun run dev   # wrangler dev
+```
+
+This boots the Worker locally at `http://localhost:8787`.
+
+### Build first
+
+The Worker imports `dist/manifest.json` at runtime. You **must run
+`bun run build` before `wrangler dev`** the first time, or after any client
+change:
+
+```sh
+bun run build && bun run dev
+```
+
+## Local D1
+
+Wrangler stores the local D1 database on disk:
+
+```
+.wrangler/state/v3/d1/
+```
+
+This is a real SQLite file managed by Miniflare. Migrations applied with
+`--local` write to this database.
+
+### Apply migrations locally
+
+```sh
+bun run db:migrate   # wrangler d1 migrations apply kilat --local
+```
+
+Run this after cloning and after pulling any new migration files.
+
+## Rebuild the local database
+
+If your local schema gets into a bad state — or you want a clean slate —
+delete the state directory and re-apply migrations:
+
+```sh
+rm -rf .wrangler/state/v3/d1/
+bun run db:migrate
+```
+
+This destroys all local data. The remote (production) database is untouched.
+
+## Seed a demo user
+
+```sh
+bun run db:seed
+```
+
+Creates a demo user with defaults:
+
+| Field    | Default             |
+| -------- | ------------------- |
+| Email    | `demo@example.com`  |
+| Password | `password123`       |
+| Role     | `user`              |
+
+You can override all three:
+
+```sh
+bun run db:seed admin@example.com admin123 admin
+```
+
+The seed script (`scripts/seed.ts`) hashes the password with PBKDF2 (Web
+Crypto) before inserting via `wrangler d1 execute kilat --local`. It skips
+insertion if the user already exists.
+
+## .dev.vars for local secrets
+
+For local OAuth or email testing, create `.dev.vars` (gitignored):
+
+```
+GOOGLE_CLIENT_ID=your-client-id
+GOOGLE_CLIENT_SECRET=your-client-secret
+RESEND_API_KEY=re_xxxxx
+```
+
+Wrangler loads `.dev.vars` into `env` during `wrangler dev`, just like
+`wrangler secret put` does in production.

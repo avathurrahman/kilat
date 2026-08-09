@@ -1,0 +1,133 @@
+---
+title: Installation
+description: Prerequisites, scaffolding, local dev, and production deploy.
+---
+
+## Prerequisites
+
+- **Bun >= 1.3** — package manager and script runner ([install](https://bun.sh)).
+  The app runs on Cloudflare Workers, not Bun — Bun only installs deps and
+  runs scripts.
+- **Cloudflare account** — free tier is enough
+  ([sign up](https://dash.cloudflare.com/sign-up)).
+- **Wrangler** — included as a devDependency, or install globally with
+  `npm i -g wrangler`.
+
+## Scaffold a new project
+
+```bash
+bun create kilat@latest my-app
+cd my-app
+```
+
+The interactive prompt picks a **framework** (React 19 / Svelte 5 / Vue 3) and
+**styling** (vanilla CSS / Tailwind CSS v4). It downloads the template, patches
+`wrangler.toml`, renames `package.json`, and runs `bun install`.
+
+```bash
+bun create kilat my-app --template svelte-tailwind   # skip prompts
+bun create kilat .                                    # use current dir
+```
+
+## Manual clone
+
+Alternatively, clone directly:
+
+```bash
+git clone https://github.com/maulanashalihin/kilat.git my-app
+cd my-app
+bun install
+```
+
+### Configure wrangler.toml
+
+Open `wrangler.toml` and set your D1 database ID and app URL:
+
+```toml
+name = "my-app"
+main = "src/worker.ts"
+compatibility_date = "2025-07-01"
+compatibility_flags = ["nodejs_compat"]
+
+[vars]
+NODE_ENV = "development"
+APP_URL = "http://localhost:8787"
+SSR = "true"
+MAIL_DRIVER = "log"
+MAIL_FROM = "no-reply@example.com"
+
+[[d1_databases]]
+binding = "DB"
+database_id = "your-database-id-here"   # from `wrangler d1 create`
+database_name = "kilat"
+migrations_dir = "migrations"
+
+[assets]
+directory = "./dist"
+binding = "ASSETS"
+run_worker_first = ["/*", "!/assets/*"]
+```
+
+Sensitive values (API keys, OAuth secrets) should use `wrangler secret put`
+instead of `[vars]`.
+
+## Local development
+
+```bash
+# 1. Create a D1 database (first time only)
+npx wrangler d1 create kilat
+# → copy the database_id into wrangler.toml
+
+# 2. Apply migrations to local D1
+bun run db:migrate
+
+# 3. Build client assets (required before first dev run)
+bun run build
+
+# 4. Run the dev server
+bun run dev          # http://localhost:8787
+```
+
+Run `bun run build` again whenever client assets change — the Worker imports
+`dist/manifest.json` at module load.
+
+## Production deploy
+
+```bash
+# 1. Create the remote D1 database (first time only)
+npx wrangler d1 create kilat
+# → copy the database_id into wrangler.toml
+
+# 2. Apply migrations to remote D1
+npx wrangler d1 migrations apply kilat --remote
+
+# 3. Build client assets
+bun run build
+
+# 4. Deploy to Workers edge
+bun run deploy
+# → https://<your-worker>.<your-subdomain>.workers.dev
+```
+
+That's it. No Docker, no VPS, no reverse proxy. The Worker runs on Cloudflare's
+edge network — 300+ locations worldwide. D1 replicates read-only copies to the
+nearest edge automatically.
+
+## Scripts
+
+| Command | What it does |
+| --- | --- |
+| `bun run dev` | Wrangler dev server (local D1 + Workers runtime) |
+| `bun run build` | esbuild client assets → `dist/` (+ `manifest.json`) |
+| `bun run deploy` | `wrangler deploy` to Cloudflare Workers edge |
+| `bun run db:migrate` | Apply D1 migrations locally |
+| `bun run db:migrate:remote` | Apply D1 migrations to remote (production) |
+| `bun run db:seed` | Create a demo user (`[email] [password] [role]` args) |
+| `bun run typecheck` | `tsc --noEmit` |
+| `bun run test` | E2E suite (`bun test --isolate`) |
+
+## Next steps
+
+- [Configuration](/deployment/configuration/) — the full env var reference.
+- [Custom domain](/deployment/custom-domain/) — point a domain at your Worker.
+- [Schema & migrations](/database/schema-migrations/) — managing D1 schema changes.

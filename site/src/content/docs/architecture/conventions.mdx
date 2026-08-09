@@ -1,0 +1,152 @@
+---
+title: Conventions
+description: The layout rules that keep Kilat coherent — routes, SQL, env, validation, CSS.
+---
+
+Kilat's structure is standardized on purpose. When everyone writes the same
+way, anyone can find anything. These rules are codified in
+[`AGENTS.md`](https://github.com/maulanashalihin/kilat/blob/main/AGENTS.md) —
+read it before writing, moving, or restructuring code.
+
+## Route conventions
+
+**File = URL namespace.** Every URL lives in exactly one file, with its GET
+render and POST actions together:
+
+- `/login`, `/register`, `/logout`, `/forgot-password`, `/reset-password` →
+  `routes/auth.routes.ts`
+- `/auth/google`, `/auth/google/callback` → `routes/google-oauth.routes.ts`
+- `/`, `/dashboard`, `/admin` → `routes/pages.routes.ts` (app shell only)
+- `/profile`, `/profile/avatar` → `routes/profile.routes.ts`
+
+Given a URL, the file name follows from its first segment — that's the
+discoverability contract. Paste a broken URL and you land in exactly one
+place.
+
+### Route factory pattern
+
+```ts
+// src/server/routes/posts.routes.ts
+import { Hono } from "hono";
+import type { AppEnv } from "../inertia-middleware";
+
+export const postsRoutes = () => new Hono<AppEnv>()
+  .get("/posts", async (c) => { /* render list */ })
+  .post("/posts", async (c) => { /* create */ });
+```
+
+Mounted in `app.ts`:
+
+```ts
+app.route("/", postsRoutes());
+```
+
+Route factories take **no arguments** — the Inertia adapter is a global
+middleware on the app, not per-route state. Handler logic stays inline in the
+route file; never create a `routes.ts` inside a feature folder.
+
+### Infra endpoints
+
+`/health` stays in `app.ts`, not a route file. Browser/DevTools well-known
+probes (`/.well-known/*`) return a plain 404 from `app.ts`.
+
+## SQL in `db.ts`
+
+All SQL lives in `src/server/db.ts` as async query functions via the D1
+binding. D1 is async — `await env.DB.prepare(sql).bind(...).first()` — which
+cascades to all route handlers, auth functions, and middleware. Never use
+sync DB patterns.
+
+```ts
+// src/server/db.ts
+export async function getUserByEmail(email: string): Promise<User | null> {
+  return await db.prepare("SELECT * FROM users WHERE email = ?")
+    .bind(email)
+    .first<User>();
+}
+```
+
+Keep `db.ts` a single file — one coherent module reads better than a tree of
+small domain files. Reconsider splitting by domain only past ~600–800 lines.
+
+### Migrations
+
+Schema changes are plain SQL files in `migrations/`, applied via Wrangler:
+
+```bash
+npx wrangler d1 migrations apply kilat --local   # dev
+npx wrangler d1 migrations apply kilat --remote  # prod
+```
+
+Rules:
+
+- **Never edit an applied migration** — add a new numbered file instead.
+- SQLite `ALTER TABLE ADD COLUMN` with `NOT NULL` requires a `DEFAULT`.
+- To rebuild local dev DB from scratch, delete `.wrangler/state/v3/d1/` and
+  re-apply migrations.
+
+## Env in `config.ts`
+
+Environment variables are read **per-request** via `initConfig(env)` in
+`config.ts`, called from the Worker fetch handler. Never read `process.env`
+in other modules — Workers does not expose it.
+
+Adding a config key means updating three places:
+
+1. `config.ts` — read and validate the key.
+2. `wrangler.toml` `[vars]` — set the value.
+3. The README env table — document it.
+
+Invalid or incomplete config **fails fast** with a clear message.
+
+## Validation via TypeBox
+
+Validation uses [TypeBox](https://github.com/sinclairzx/typebox) schemas at
+the route level. `app.onError` maps `ValidationFailed` to 422 Inertia page
+payloads with field-level errors:
+
+```ts
+// at the route level
+import { Type } from "@sinclair/typebox";
+import { validate } from "../validation";
+
+const RegisterSchema = Type.Object({
+  email: Type.String({ format: "email" }),
+  password: Type.String({ minLength: 8 }),
+});
+
+const body = validate(RegisterSchema, await c.req.json());
+```
+
+The `email` format is registered explicitly in `validation.ts` — plain
+`@sinclair/typebox` does not pre-register string formats. Add other formats
+there.
+
+## CSS is co-located
+
+`styles.css` holds **only global base**: design tokens (`:root`,
+`[data-theme]`), reset, `:focus-visible`, and shared UI primitives used across
+multiple pages (`.btn`, `.badge`, `.panel`, `.table`, `.avatar`).
+
+Everything else lives in a sibling `.css` file imported by the component or
+page that uses it (`Brand.css`, `Layout.css`, `Dashboard.css`, …). Never add
+page-specific or component-specific rules to `styles.css`. esbuild bundles all
+imported `.css` files into one stylesheet via the import graph.
+
+## TypeScript
+
+`strict` + `noUncheckedIndexedAccess` + `verbatimModuleSyntax` are on:
+
+- No loose `any` — queries are parameterized and typed.
+- Type-only imports MUST use `import type`.
+- Array access returns `T | undefined` — no forgotten null checks.
+
+```bash
+bun run typecheck    # tsc --noEmit
+```
+
+## Next steps
+
+- [Request lifecycle](/architecture/request-lifecycle/) — the full middleware chain.
+- [Building with AI agents](/getting-started/ai-agents/) — why these rules are codified.
+- [Adding a feature](/extending/adding-a-feature/) — apply the conventions end to end.

@@ -1,0 +1,193 @@
+---
+const faqs: { q: string; a: string }[] = [
+    {
+        q: "How is Kilat different from Next.js, Nuxt, or SvelteKit?",
+        a: "Those are meta-frameworks that couple a server model to one client framework and leave auth and persistence to you. Kilat is a single Cloudflare Worker with Hono + D1 + Inertia v3, auth already wired, raw SQL instead of an ORM, and React, Svelte, or Vue as a swappable template. Pick a meta-framework for RSC or edge middleware; pick Kilat for a wired, ownable, edge-native stack.",
+    },
+    {
+        q: "How is Kilat different from Dulak?",
+        a: "Dulak runs on Bun (Bun.serve + bun:sqlite + Bun.build). Kilat runs on Cloudflare Workers (Wrangler + D1 + esbuild). Same philosophy, same structure, same Inertia v3 SSR pattern — different runtime. Dulak is for self-hosting on a VPS; Kilat is for zero-ops edge deployment. The dual esbuild build pattern (pre-build SSR to dist/ssr.js) is Kilat's key innovation — Wrangler's internal esbuild can't compile .svelte or .vue files, so we pre-build SSR to plain JS.",
+    },
+    {
+        q: "Why Cloudflare Workers and not Bun?",
+        a: "Zero ops. No Docker, no VPS, no process supervisor. wrangler deploy and you're live on 300+ edge locations. D1 replicates read-only copies to the nearest edge automatically. The free tier is enough for most apps. Pick Bun (Dulak) for maximum control and synchronous SQLite; pick Workers (Kilat) for zero-ops edge deployment.",
+    },
+    {
+        q: "Do I have to use React?",
+        a: "No. Kilat ships templates for React 19, Svelte 5, and Vue 3 — each with vanilla CSS or Tailwind CSS v4. The server side (Hono, D1, auth) is identical across all of them.",
+    },
+    {
+        q: "Why no ORM?",
+        a: "ORMs were built to help humans avoid writing SQL. In 2026, AI generates correct, optimized raw SQL on demand — the human-friction problem ORMs solved is gone. What remains is the cost: an ORM is a dependency you upgrade, audit, and debug, and it adds a layer between you and the database that hides the actual query plan. D1 with prepared statements is explicit and zero-dependency. You see the exact SQL that runs.",
+    },
+    {
+        q: "Why PBKDF2 and not argon2?",
+        a: "Workers doesn't have native argon2. PBKDF2 via Web Crypto (crypto.subtle) is zero-dependency and runs natively in the Workers runtime. Workers caps PBKDF2 at 100K iterations (OWASP recommends 600K, which throws NotSupportedError) — 100K is still OWASP-acceptable for PBKDF2-HMAC-SHA256.",
+    },
+    {
+        q: "Is it production-ready?",
+        a: "Yes — every guardrail a deployed app needs is wired and tested, not scaffolded: PBKDF2 passwords (Web Crypto), DB-backed sessions (not JWT), CSRF origin checks, security headers (CSP, nosniff, frame denial), versioned migrations, HSTS, and an E2E suite that boots the full app. The server side is not a demo — it is the same code path that runs in production. What is missing is your business logic, and that is the point.",
+    },
+    {
+        q: "Will this still work in 5–10 years?",
+        a: "Yes, and here is why: Kilat is a boilerplate you fork and own, not a framework that can be deprecated out from under you. The stack is chosen for longevity — Cloudflare Workers, Hono, D1, and Inertia are stable, pinned versions with no pending rewrites. When a dependency does release a new major, it is a deliberate migration you schedule and test — not an emergency. And because there is no ORM, no SDK, no proprietary abstraction layer, the code you own is just TypeScript, SQL, and HTTP — readable and maintainable by any developer or AI agent, now and in 2036.",
+    },
+];
+---
+
+<section class="dl-faq">
+    <div class="dl-faq-cta">
+        <h2 class="dl-section-title">Start in one command.</h2>
+        <div class="dl-cta-cmd">bun create kilat@latest</div>
+        <div class="dl-cta-actions">
+            <a class="dl-cta-btn" href="/getting-started/introduction/"
+                >Get started</a
+            >
+            <a
+                class="dl-cta-btn dl-cta-btn-ghost"
+                href="https://github.com/maulanashalihin/kilat"
+                target="_blank"
+                rel="noreferrer">View on GitHub</a
+            >
+        </div>
+    </div>
+    <h2 class="dl-section-title">FAQ</h2>
+    <p class="dl-section-sub">
+        The short version. For the long version, read the <a
+            href="/comparisons/">comparison article</a
+        >.
+    </p>
+    <div class="dl-faq-list">
+        {
+            faqs.map((f) => (
+                <details class="dl-faq-item">
+                    <summary>{f.q}</summary>
+                    <p>{f.a}</p>
+                </details>
+            ))
+        }
+    </div>
+</section>
+
+<style>
+    .dl-faq {
+        max-width: 760px;
+        margin: 0 auto 4.5rem;
+        padding: 0 1.5rem;
+    }
+    .dl-faq-cta {
+        text-align: center;
+        padding-bottom: 2.5rem;
+        margin-bottom: 2.5rem;
+        border-bottom: 1px solid #1f2937;
+    }
+    .dl-cta-cmd {
+        display: inline-block;
+        font-family: "SF Mono", "Fira Code", monospace;
+        font-size: 0.95rem;
+        color: #34d399;
+        background: #0f141a;
+        border: 1px solid #1f2937;
+        border-radius: 0.5rem;
+        padding: 0.6rem 1.2rem;
+        margin: 1rem 0 1.5rem;
+    }
+    .dl-cta-actions {
+        display: flex;
+        gap: 0.75rem;
+        justify-content: center;
+    }
+    .dl-cta-btn {
+        display: inline-flex;
+        align-items: center;
+        gap: 0.4rem;
+        padding: 0.7rem 1.6rem;
+        border-radius: 0.55rem;
+        font-weight: 600;
+        font-size: 0.92rem;
+        text-decoration: none;
+        transition:
+            transform 0.15s ease,
+            box-shadow 0.15s ease;
+    }
+    .dl-cta-btn:hover {
+        transform: translateY(-1px);
+    }
+    .dl-cta-btn:not(.dl-cta-btn-ghost) {
+        background: #047857;
+        color: #fff;
+        box-shadow: 0 8px 24px rgba(5, 150, 105, 0.35);
+    }
+    .dl-cta-btn:not(.dl-cta-btn-ghost):hover {
+        box-shadow: 0 12px 32px rgba(5, 150, 105, 0.5);
+    }
+    .dl-cta-btn-ghost {
+        border: 1px solid #263041;
+        color: #d3dae4;
+        background: rgba(15, 17, 23, 0.6);
+    }
+    .dl-cta-btn-ghost:hover {
+        background: rgba(30, 41, 59, 0.8);
+    }
+    .dl-section-title {
+        font-size: 1.7rem;
+        letter-spacing: -0.02em;
+        text-align: center;
+    }
+    .dl-section-sub {
+        text-align: center;
+        color: #8b95a5;
+        margin: 0.4rem 0 2.2rem;
+    }
+    .dl-section-sub a {
+        color: #34d399;
+        text-decoration: none;
+    }
+    .dl-section-sub a:hover {
+        text-decoration: underline;
+    }
+    .dl-faq-list {
+        display: flex;
+        flex-direction: column;
+        gap: 0.6rem;
+    }
+    .dl-faq-item {
+        border: 1px solid #1f2937;
+        border-radius: 0.6rem;
+        background: #0f141a;
+        transition: border-color 0.2s ease;
+    }
+    .dl-faq-item[open] {
+        border-color: #059669;
+    }
+    .dl-faq-item summary {
+        cursor: pointer;
+        padding: 0.9rem 1.1rem;
+        font-weight: 600;
+        font-size: 0.95rem;
+        list-style: none;
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+    }
+    .dl-faq-item summary::-webkit-details-marker {
+        display: none;
+    }
+    .dl-faq-item summary::after {
+        content: "+";
+        color: #34d399;
+        font-size: 1.2rem;
+        font-weight: 400;
+        transition: transform 0.2s ease;
+    }
+    .dl-faq-item[open] summary::after {
+        transform: rotate(45deg);
+    }
+    .dl-faq-item p {
+        margin: 0;
+        padding: 0 1.1rem 1rem;
+        font-size: 0.88rem;
+        line-height: 1.6;
+        color: #9aa4b2;
+    }
+</style>
