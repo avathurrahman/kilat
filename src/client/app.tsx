@@ -5,8 +5,9 @@
  */
 import { createInertiaApp } from "@inertiajs/react";
 import { createRoot, hydrateRoot } from "react-dom/client";
-import "./styles.css";
 import { notFoundPage, pages } from "./pages";
+import "./.tailwind.css"; // Tailwind output (preflight + utilities)
+import "./styles.css"; // custom CSS (overrides Tailwind via cascade)
 
 const resolve = (name: string) =>
 	pages[`./pages/${name}.tsx`]?.default ?? notFoundPage!;
@@ -24,4 +25,5 @@ createInertiaApp({
 	},
 	title: (title: string) =>
 		title ? `${title} — Kilat` : "Kilat",
+	progress: { color: "#059669" },
 });

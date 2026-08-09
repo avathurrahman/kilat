@@ -10,9 +10,12 @@ export default function Brand({
 	className?: string;
 }) {
 	return (
-		<Link href={href} className={className ? `brand ${className}` : "brand"}>
+		<Link
+			href={href}
+			className={`inline-flex items-center gap-2 font-bold text-text tracking-tight hover:no-underline ${className ?? ""}`}
+		>
 			<svg
-				className="brand-mark"
+				className="text-primary shrink-0"
 				viewBox="0 0 32 32"
 				width="28"
 				height="28"

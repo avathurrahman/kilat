@@ -17,6 +17,6 @@ export async function renderPage(page: Page) {
 		resolve: (name) => pages[`./pages/${name}.tsx`]?.default ?? notFoundPage!,
 		setup: ({ App, props }) => <App {...props} />,
 		title: (title: string) =>
-		title ? `${title} — Kilat` : "Kilat",
+			title ? `${title} — Kilat` : "Kilat",
 	});
 }

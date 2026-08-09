@@ -15,6 +15,7 @@ import { createHash } from "node:crypto";
 import { existsSync, mkdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { basename, join } from "node:path";
 import esbuild from "esbuild";
+import { $ } from "bun";
 
 const DIST_DIR = "dist";
 const ASSETS_DIR = join(DIST_DIR, "assets");
@@ -30,6 +31,10 @@ async function buildClientAssets(): Promise<void> {
   // Clean dist/ — stale hashed files would accumulate otherwise.
   if (existsSync(DIST_DIR)) rmSync(DIST_DIR, { recursive: true });
   mkdirSync(ASSETS_DIR, { recursive: true });
+
+  // Compile Tailwind v4 → static CSS (no PostCSS needed).
+  // Produces src/client/.tailwind.css which app.tsx imports.
+  await $`bunx @tailwindcss/cli -i src/client/tailwind.css -o src/client/.tailwind.css --minify`.quiet();
 
   const result = await esbuild.build({
     entryPoints: ["src/client/app.tsx"],
