@@ -1,0 +1,41 @@
+{
+  "name": "create-kilat",
+  "version": "0.1.0",
+  "license": "MIT",
+  "description": "Scaffold a new Kilat project — Cloudflare Workers + Hono + D1 + Inertia v3 boilerplate with template selection (React/Svelte/Vue, vanilla CSS/Tailwind).",
+  "keywords": [
+    "kilat",
+    "cloudflare-workers",
+    "hono",
+    "d1",
+    "inertia",
+    "react",
+    "svelte",
+    "vue",
+    "vanilla-css",
+    "tailwind",
+    "boilerplate",
+    "ssr",
+    "create"
+  ],
+  "homepage": "https://github.com/maulanashalihin/kilat",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/maulanashalihin/kilat.git",
+    "directory": "create-kilat"
+  },
+  "bin": {
+    "create-kilat": "index.js"
+  },
+  "files": [
+    "index.js"
+  ],
+  "engines": {
+    "node": ">=18"
+  },
+  "type": "module",
+  "dependencies": {
+    "@clack/prompts": "^1.7.0",
+    "giget": "^3.3.1"
+  }
+}
