@@ -11,3 +11,4 @@ data/uploads/
 .wrangler/
 .svelte-css-cache/
 src/client/.tailwind.css
+create-kilat/bun.lock
