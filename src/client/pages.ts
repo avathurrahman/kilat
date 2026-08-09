@@ -1,33 +1,32 @@
 /**
- * Page registry. Explicit imports work identically in the Bun server
- * runtime and the Bun.build client bundle (Bun 1.3 removed
- * `import.meta.glob`). Keys use the `./pages/<Name>.svelte` convention
- * that `resolve()` builds from the Inertia component name.
+ * Explicit page registry (Bun 1.3 removed import.meta.glob). Shared by the
+ * client bundle and the SSR renderer.
  */
-import type { Component } from "svelte";
-import Admin from "./pages/Admin.svelte";
-import Dashboard from "./pages/Dashboard.svelte";
-import ForgotPassword from "./pages/ForgotPassword.svelte";
-import Login from "./pages/Login.svelte";
-import NotFound from "./pages/NotFound.svelte";
-import Profile from "./pages/Profile.svelte";
-import Register from "./pages/Register.svelte";
-import ResetPassword from "./pages/ResetPassword.svelte";
+import type { Component, DefineComponent } from "vue";
+import Admin from "./pages/Admin.vue";
+import Dashboard from "./pages/Dashboard.vue";
+import ForgotPassword from "./pages/ForgotPassword.vue";
+import Login from "./pages/Login.vue";
+import NotFound from "./pages/NotFound.vue";
+import Profile from "./pages/Profile.vue";
+import Register from "./pages/Register.vue";
+import ResetPassword from "./pages/ResetPassword.vue";
 
-type PageModule = { default: Component<any> };
+/** `Component` (not bare `DefineComponent`): SFC default exports carry their
+ *  props as generics, which are not assignable to the parameterless form. */
+type PageModule = { default: Component };
 
 export const pages: Record<string, PageModule> = {
-	"./pages/Admin.svelte": { default: Admin },
-	"./pages/Dashboard.svelte": { default: Dashboard },
-	"./pages/ForgotPassword.svelte": { default: ForgotPassword },
-	"./pages/Login.svelte": { default: Login },
-	"./pages/NotFound.svelte": { default: NotFound },
-	"./pages/Profile.svelte": { default: Profile },
-	"./pages/Register.svelte": { default: Register },
-	"./pages/ResetPassword.svelte": { default: ResetPassword },
+	"./pages/Admin.vue": { default: Admin },
+	"./pages/Dashboard.vue": { default: Dashboard },
+	"./pages/ForgotPassword.vue": { default: ForgotPassword },
+	"./pages/Login.vue": { default: Login },
+	"./pages/NotFound.vue": { default: NotFound },
+	"./pages/Profile.vue": { default: Profile },
+	"./pages/Register.vue": { default: Register },
+	"./pages/ResetPassword.vue": { default: ResetPassword },
 };
 
-/** Fallback for unknown component names — never resolve to undefined. */
-export const notFoundPage: PageModule = pages["./pages/NotFound.svelte"] ?? {
-	default: NotFound,
-};
+export const notFoundPage = pages["./pages/NotFound.vue"]?.default as
+	DefineComponent;
+

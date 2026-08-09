@@ -1,15 +1,15 @@
 /**
- * Client asset build for Cloudflare Workers (Svelte template).
+ * Client asset build for Cloudflare Workers (Vue template).
  *
  * Two esbuild passes:
- *   1. Client bundle: Svelte compiled for browser (generate: 'client')
+ *   1. Client bundle: Vue SFCs compiled for browser
  *      → dist/assets/app-[hash].js + CSS
- *   2. SSR bundle: Svelte compiled for server (generate: 'server')
+ *   2. SSR bundle: Vue SFCs compiled for server-side rendering
  *      → dist/ssr.js (plain JS, imported by Worker via inertia.ts)
  *
  * The SSR bundle is pre-built because Wrangler's internal esbuild does not
- * support custom plugins — it cannot compile .svelte files. By outputting
- * a plain JS bundle, Wrangler can bundle it without a Svelte plugin.
+ * support custom plugins — it cannot compile .vue files. By outputting
+ * a plain JS bundle, Wrangler can bundle it without a Vue plugin.
  *
  * The asset version (content hash) doubles as the Inertia version for
  * cache-busting (409 on mismatch).
@@ -20,7 +20,7 @@ import { createHash } from "node:crypto";
 import { existsSync, mkdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import esbuild from "esbuild";
-import { sveltePlugin } from "./svelte-plugin";
+import { vuePlugin } from "./vue-plugin";
 
 const DIST_DIR = "dist";
 const ASSETS_DIR = join(DIST_DIR, "assets");
@@ -37,7 +37,7 @@ async function buildClientAssets(): Promise<void> {
   if (existsSync(DIST_DIR)) rmSync(DIST_DIR, { recursive: true });
   mkdirSync(ASSETS_DIR, { recursive: true });
 
-  // 1. Client bundle: Svelte compiled for browser.
+  // 1. Client bundle: Vue SFCs compiled for browser.
   const clientResult = await esbuild.build({
     entryPoints: ["src/client/app.ts"],
     outdir: ASSETS_DIR,
@@ -49,8 +49,7 @@ async function buildClientAssets(): Promise<void> {
     target: "es2022",
     write: false,
     define: { "process.env.NODE_ENV": '"production"' },
-    plugins: [sveltePlugin("client")],
-    conditions: ["svelte"],
+    plugins: [vuePlugin()],
     loader: { ".css": "css" },
   });
 
@@ -77,9 +76,9 @@ async function buildClientAssets(): Promise<void> {
     writeFileSync(join(ASSETS_DIR, cssName), cssFile.contents);
   }
 
-  // 2. SSR bundle: Svelte compiled for server-side rendering.
+  // 2. SSR bundle: Vue SFCs compiled for server-side rendering.
   // Output as plain JS (dist/ssr.js) so Wrangler can bundle it without
-  // needing a Svelte plugin.
+  // needing a Vue plugin.
   await esbuild.build({
     entryPoints: ["src/client/ssr.ts"],
     outfile: join(DIST_DIR, "ssr.js"),
@@ -92,8 +91,7 @@ async function buildClientAssets(): Promise<void> {
     platform: "neutral",
     write: true,
     define: { "process.env.NODE_ENV": '"production"' },
-    plugins: [sveltePlugin("server")],
-    conditions: ["svelte"],
+    plugins: [vuePlugin({ ssr: true })],
   });
 
   // The version is the JS hash — Inertia uses it for 409 reload negotiation.

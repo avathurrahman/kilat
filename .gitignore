@@ -9,4 +9,3 @@ data/uploads/
 *.png
 .llm-wiki/meta/
 .wrangler/
-.svelte-css-cache/

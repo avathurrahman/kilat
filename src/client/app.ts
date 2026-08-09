@@ -1,26 +1,28 @@
 /**
- * Client entry. Bootstraps Inertia v3 + Svelte 5.
- * When the page was server-rendered (data-server-rendered attribute) we
- * hydrate; otherwise we do a plain client mount.
+ * Client entry. Bootstraps Inertia v3 + Vue 3.
+ * When the page was server-rendered (data-server-rendered attribute) the app
+ * is created with createSSRApp, whose mount() hydrates; otherwise a plain
+ * client render.
  */
-import { createInertiaApp } from "@inertiajs/svelte";
-import { mount, hydrate } from "svelte";
-import "./styles.css";
+import { createInertiaApp } from "@inertiajs/vue3";
+import type { DefineComponent } from "vue";
+import { createApp, createSSRApp, h } from "vue";
+import "./styles.css"; // global base: tokens, reset, shared UI primitives
 import { notFoundPage, pages } from "./pages";
-
-const resolve = (name: string) =>
-	pages[`./pages/${name}.svelte`] ?? notFoundPage;
 
 createInertiaApp({
 	id: "app",
-	resolve,
-	setup({ el, App, props }) {
-		if (!el) throw new Error("Root element #app not found");
-		if (el.hasAttribute("data-server-rendered")) {
-			hydrate(App, { target: el, props });
-		} else {
-			mount(App, { target: el, props });
-		}
+	resolve: (name) =>
+		(pages[`./pages/${name}.vue`]?.default ?? notFoundPage) as DefineComponent,
+	setup({ el, App, props, plugin }) {
+		const hydrate = el.hasAttribute("data-server-rendered");
+		const app = (hydrate ? createSSRApp : createApp)({
+			render: () => h(App, props),
+		});
+		app.use(plugin);
+		app.mount(el);
 	},
+	title: (title: string) =>
+		title ? `${title} — Kilat` : "Kilat",
 	progress: { color: "#059669" },
 });
