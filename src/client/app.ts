@@ -5,8 +5,9 @@
  */
 import { createInertiaApp } from "@inertiajs/svelte";
 import { mount, hydrate } from "svelte";
-import "./styles.css";
 import { notFoundPage, pages } from "./pages";
+import "./.tailwind.css"; // Tailwind output (preflight + utilities)
+import "./styles.css"; // custom CSS (overrides Tailwind via cascade)
 
 const resolve = (name: string) =>
 	pages[`./pages/${name}.svelte`] ?? notFoundPage;
