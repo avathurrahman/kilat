@@ -1,0 +1,130 @@
+---
+title: Architecture overview
+description: The src/ layout, how worker.ts wires the request, and the dual esbuild build pattern.
+---
+
+## The `src/` layout
+
+```
+src/
+├── worker.ts               # Cloudflare Workers entry: initConfig, initDb, app.fetch
+├── server/
+│   ├── app.ts              # composition: middleware order, onError, notFound, routes
+│   ├── config.ts           # validated env config via initConfig(env) per-request
+│   ├── db.ts               # D1 async query helpers (prepare/bind/first/all/run)
+│   ├── auth.ts             # PBKDF2 (Web Crypto), sessions, flash, cookies, guards
+│   ├── inertia.ts          # Inertia v3 server adapter (SSR shell, XHR, 409)
+│   ├── inertia-middleware.ts # per-request session resolve → c.var (AppEnv)
+│   ├── validation.ts       # TypeBox JSON validation → ValidationFailed (422)
+│   ├── mailer.ts           # mail drivers: log / resend / mailtrap
+│   ├── rate-limit.ts       # no-op stub (use KV/DO for real limiting)
+│   ├── logger.ts           # per-request console.log + crypto.randomUUID
+│   ├── security.ts         # CSRF origin check (headers via hono/secure-headers)
+│   ├── url.ts              # defensive request-URL parsing
+│   ├── assets.ts           # re-exports InertiaAssets type
+│   └── routes/
+│       ├── auth.routes.ts         # /login /register /logout /forgot/reset (GET+POST)
+│       ├── google-oauth.routes.ts # /auth/google, /auth/google/callback
+│       ├── pages.routes.ts        # app-shell pages: /, /dashboard, /admin
+│       └── profile.routes.ts      # /profile page + /profile/avatar
+├── client/
+│   ├── app.tsx             # Inertia client bootstrap (hydrate or render)
+│   ├── ssr.tsx             # in-process SSR renderer (react-dom/server)
+│   ├── pages.ts            # explicit page registry (shared by SSR + bundle)
+│   ├── pages/              # Login, Register, Dashboard, ForgotPassword,
+│   │                       # ResetPassword, Admin, NotFound, Profile
+│   ├── components/         # Layout, AuthLayout, Brand, Field
+│   └── styles.css          # plain CSS, light/dark
+├── shared/
+│   ├── types.ts            # User, Role, FlashData, SharedPageProps, Paginated
+│   └── inertia.d.ts        # InertiaConfig augmentation → typed props.auth
+├── migrations/             # versioned SQL schema files (0001, 0002, …)
+└── tests/                  # bun:test E2E suite
+scripts/
+├── build.ts                # esbuild: bundle client → dist/assets/app-[hash].js + CSS
+└── seed.ts                 # wrangler d1 execute kilat --local + hashPassword
+wrangler.toml               # Workers config: D1 binding, ASSETS binding, nodejs_compat, env vars
+dist/                       # build output (gitignored), served by Workers Static Assets
+```
+
+`src/server/` is **flat except `routes/`** — no feature subfolders. Shared or
+transport-independent logic becomes a single flat module (`auth.ts`,
+`security.ts`, `mailer.ts`). Extract a module only when logic is reused across
+routes or independent of Hono's context.
+
+## How `worker.ts` wires a request
+
+The Workers runtime calls `fetch` per request. `env` carries the D1 + ASSETS
+bindings and environment variables:
+
+```ts
+// src/worker.ts
+import { createApp } from "./server/app";
+import { initConfig, type EnvVars } from "./server/config";
+import { initDb } from "./server/db";
+import manifest from "../dist/manifest.json";
+import type { InertiaAssets } from "./server/inertia";
+
+export interface Env extends EnvVars {
+  DB: D1Database;
+  ASSETS: Fetcher;
+}
+
+const assets = manifest as InertiaAssets;
+const app = createApp(assets);
+
+export default {
+  async fetch(request: Request, env: Env): Promise<Response> {
+    initConfig(env);       // validate env → module-level config singleton
+    initDb(env.DB);        // bind D1 → module-level db singleton
+    return app.fetch(request, env);
+  },
+} satisfies ExportedHandler<Env>;
+```
+
+`initConfig` and `initDb` run **per-request** — they mutate module-level
+singletons via cheap pointer assignments. Workers isolates are stateless; do
+not cache state across requests. The app is built once at module load (the
+`createApp(assets)` call); only config and DB are re-bound each request.
+
+## The dual esbuild build pattern
+
+Kilat uses esbuild (not `Bun.build`) because the app runs on Workers, not Bun.
+The build produces content-hashed assets and a manifest the Inertia adapter
+reads:
+
+```
+scripts/build.ts
+  ↓ esbuild (entry: src/client/app.tsx)
+dist/assets/app-[hash].js   ← client bundle (React + Inertia)
+dist/assets/app-[hash].css  ← bundled stylesheet
+dist/manifest.json          ← { version, js, css } for the Inertia adapter
+```
+
+The asset **version** is the JS content hash — Inertia uses it for 409 reload
+negotiation. When assets change, stale clients get a 409 and reload.
+
+```bash
+bun run build    # run before `wrangler dev` or `wrangler deploy`
+```
+
+### Svelte / Vue SSR
+
+Wrangler's esbuild can't compile `.svelte` or `.vue` at deploy time, so those
+templates **pre-build the SSR bundle** to `dist/ssr.js`. The Worker imports
+the pre-built bundle instead of compiling SSR in-process. React 19
+`renderToString` runs inside the Worker bundle directly — no pre-build step
+needed.
+
+### Static assets
+
+Static assets are served via the **Workers Static Assets binding**
+(`env.ASSETS`), not a custom handler. `run_worker_first = ["/*", "!/assets/*"]`
+in `wrangler.toml` means all requests hit the Worker first except `/assets/*`,
+which bypass to the static asset binding directly.
+
+## Next steps
+
+- [Conventions](/architecture/conventions/) — the rules that keep the layout coherent.
+- [Request lifecycle](/architecture/request-lifecycle/) — the full middleware chain.
+- [Building with AI agents](/getting-started/ai-agents/) — why the layout is codified in `AGENTS.md`.

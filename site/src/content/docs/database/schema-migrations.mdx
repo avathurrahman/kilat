@@ -1,0 +1,115 @@
+---
+title: Schema & migrations
+description: Numbered SQL migrations and async D1 query helpers in db.ts.
+---
+
+Kilat uses **D1** (SQLite at the edge) with zero ORM. Schema changes are
+versioned SQL files; queries are async helper functions in `src/server/db.ts`.
+
+## Migrations
+
+Migrations live in `migrations/` as numbered SQL files:
+
+```
+migrations/
+├── 0001_users.sql
+├── 0002_sessions.sql
+├── 0003_password_resets.sql
+└── 0004_uploads.sql
+```
+
+### Applying migrations
+
+```sh
+# Local dev (Miniflare-backed D1)
+wrangler d1 migrations apply kilat --local
+
+# Production (remote D1)
+wrangler d1 migrations apply kilat --remote
+```
+
+Or via the npm scripts:
+
+```sh
+bun run db:migrate        # --local
+bun run db:migrate:remote # --remote
+```
+
+Wrangler tracks applied migrations in a `d1_migrations` table — only new files
+run on each invocation.
+
+### Never edit an applied migration
+
+Migrations are forward-only and append-only. If you need to change a table,
+add a new numbered file (`0005_*.sql`) with `ALTER TABLE` statements. Editing
+a file that's already been applied to any database breaks the migration
+history and can corrupt the `d1_migrations` tracking table.
+
+### Example migration
+
+```sql
+-- 0002_sessions.sql — DB-backed sessions.
+CREATE TABLE IF NOT EXISTS sessions (
+  token_hash TEXT PRIMARY KEY,
+  user_id    INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+  flash      TEXT    NOT NULL DEFAULT '{}',
+  expires_at TEXT    NOT NULL,
+  created_at TEXT    NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ', 'now'))
+);
+
+CREATE INDEX IF NOT EXISTS idx_sessions_user_id ON sessions(user_id);
+```
+
+## Query helpers in db.ts
+
+All SQL lives in `src/server/db.ts` as async query functions built on the D1
+binding. There is no repository-per-entity folder — one coherent module.
+
+### The D1 pattern
+
+```ts
+let d1: D1Database;
+
+export function initDb(db: D1Database): void {
+  d1 = db; // called per-request in src/worker.ts
+}
+```
+
+`initDb(env.DB)` runs in the fetch handler before the app processes anything.
+It's a cheap pointer assignment — Workers isolates are stateless, so no
+cross-request caching.
+
+### The four query shapes
+
+```ts
+// .first() — one row (or null)
+const user = await findUserByEmail(email);
+// → d1.prepare("SELECT … WHERE email = ?").bind(email).first<UserRow>()
+
+// .all() — many rows
+const users = await listUsers(limit, offset);
+// → (await d1.prepare("SELECT … LIMIT ? OFFSET ?").bind(...).all<UserRow>()).results
+
+// .run() — write with no return
+await deleteSession(tokenHash);
+// → d1.prepare("DELETE FROM sessions WHERE token_hash = ?").bind(hash).run()
+
+// .first<{ id: number }>() — write with RETURNING
+const { id } = await createUser(name, email, hash);
+// → d1.prepare("INSERT … RETURNING id").bind(...).first<{ id: number }>()
+```
+
+| Method     | Returns            | Use for                          |
+| ---------- | ------------------ | -------------------------------- |
+| `.first()` | `T | null`         | Single-row reads, `RETURNING`    |
+| `.all()`   | `{ results: T[] }` | List queries                     |
+| `.run()`   | `{ meta: … }`      | Inserts/updates/deletes          |
+
+All queries use **parameterized binds** (`?` placeholders) — never string
+interpolation. TypeScript is `strict` + `noUncheckedIndexedAccess`; row types
+are explicit interfaces (`UserRow`, `SessionRow`, …).
+
+### All DB calls are async
+
+D1 is async — `await` is required on every query. This cascades to all route
+handlers, auth functions, and middleware. Never use sync DB patterns.

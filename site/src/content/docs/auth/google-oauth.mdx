@@ -1,0 +1,99 @@
+---
+title: Google OAuth
+description: Zero-dependency Google OAuth using plain fetch — no SDK required.
+---
+
+Kilat includes a register-or-login Google OAuth flow in
+`src/server/routes/google-oauth.routes.ts`. It uses **plain `fetch`** against
+Google's endpoints — no `googleapis` SDK, no Passport strategy, zero extra
+dependencies.
+
+## How it works
+
+1. **`GET /auth/google`** — generates a random `state`, stores it in a
+   short-lived `oauth_state` cookie (10-minute TTL), and redirects to Google's
+   consent screen.
+2. **`GET /auth/google/callback`** — validates the `state` against the cookie
+   (CSRF protection), exchanges the `code` for an access token, fetches the
+   profile, finds-or-creates a local user, and starts a session.
+3. The user is redirected to `/dashboard` on success, or `/login?notice=google_failed`
+   on any error.
+
+```ts
+// Token exchange — plain fetch, no SDK
+const res = await fetch("https://oauth2.googleapis.com/token", {
+  method: "POST",
+  headers: { "content-type": "application/x-www-form-urlencoded" },
+  body: new URLSearchParams({
+    code,
+    client_id: config.google.clientId!,
+    client_secret: config.google.clientSecret!,
+    redirect_uri: `${config.appUrl}/auth/google/callback`,
+    grant_type: "authorization_code",
+  }),
+});
+```
+
+### User linking
+
+`findOrCreateGoogleUser` links by Google ID first, then by email — an existing
+password-based account with the same email gets its `google_id` linked rather
+than duplicated. Avatar storage is skipped (no R2 binding); the external Google
+picture URL is stored directly.
+
+## Setup
+
+### 1. Google Cloud Console
+
+1. Go to **Google Cloud Console → APIs & Services → Credentials**.
+2. Create an **OAuth 2.0 Client ID** (Web application).
+3. Add your **Authorized redirect URI**:
+
+   ```
+   https://<your-workers-domain>/auth/google/callback
+   ```
+
+   For local dev: `http://localhost:8787/auth/google/callback`
+
+4. Note the **Client ID** and **Client Secret**.
+
+### 2. Configure secrets
+
+Set both values as Wrangler secrets (never commit them to `wrangler.toml`):
+
+```sh
+wrangler secret put GOOGLE_CLIENT_ID
+wrangler secret put GOOGLE_CLIENT_SECRET
+```
+
+For local dev, add them to `.dev.vars`:
+
+```
+GOOGLE_CLIENT_ID=your-client-id
+GOOGLE_CLIENT_SECRET=your-client-secret
+```
+
+### 3. Set APP_URL
+
+`config.appUrl` builds the redirect URI. Ensure `APP_URL` in `wrangler.toml`
+`[vars]` matches your deployed domain exactly (including `https://`).
+
+## Auto-disable when unconfigured
+
+OAuth stays **off** when either secret is missing. `config.ts` validates that
+`GOOGLE_CLIENT_ID` and `GOOGLE_CLIENT_SECRET` are set together — setting only
+one throws a config error at boot.
+
+The login and register pages receive a `googleEnabled` boolean prop and
+**hide the "Sign in with Google" button** when OAuth is not configured:
+
+```ts
+app.get("/login", guestOnly, (c) =>
+  c.var.inertia.render("Login", {
+    googleEnabled: Boolean(config.google.clientId),
+  }),
+);
+```
+
+Hitting `/auth/google` while unconfigured returns a plain `400` rather than a
+broken redirect.

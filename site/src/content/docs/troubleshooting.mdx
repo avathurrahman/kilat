@@ -1,0 +1,97 @@
+---
+title: Troubleshooting
+description: Common Workers-specific pitfalls and their fixes.
+---
+
+## Must run `bun run build` before `wrangler dev`
+
+The Worker imports `dist/manifest.json` at runtime to resolve hashed asset
+paths. If `dist/` doesn't exist (first clone, or after deleting it), `wrangler
+dev` fails with a module resolution error.
+
+```sh
+bun run build && bun run dev
+```
+
+Rebuild after any client-side change (`src/client/`) — the Worker serves the
+stale bundle otherwise.
+
+## `Response.redirect()` has immutable headers on Workers
+
+Hono's `secureHeaders` middleware tries to append security headers to the
+response. `Response.redirect()` returns a `Response` with **frozen headers** on
+the Workers runtime — `headers.append()` throws.
+
+**Fix:** build the redirect manually:
+
+```ts
+// ❌ crashes on Workers
+return Response.redirect(url, 302);
+
+// ✅ works
+return new Response(null, { status: 302, headers: { location: url.toString() } });
+```
+
+This pattern is used throughout `inertia.ts`, `auth.ts`, and
+`google-oauth.routes.ts`.
+
+## PBKDF2 is capped at 100K iterations
+
+The OWASP-recommended 600K iterations throws `NotSupportedError` on Workers.
+Kilat uses 100K, which is still OWASP-acceptable for PBKDF2-HMAC-SHA256 and
+fits the CPU budget. Do not raise `PBKDF2_ITERATIONS` above 100K.
+
+```ts
+const PBKDF2_ITERATIONS = 100_000; // Workers caps here — do not increase
+```
+
+## Wrangler auto-compresses — no custom compress middleware
+
+Wrangler/Miniflare applies gzip/br compression natively. Adding a custom
+compress middleware causes **double-compression** (gzip-on-gzip) and breaks
+small JSON responses (the Inertia XHR payload gets consumed below the
+threshold).
+
+Don't add one. If you see garbled responses or empty XHR bodies, check whether
+a compress middleware slipped in.
+
+## Svelte/Vue need pre-built SSR
+
+Wrangler's esbuild bundler cannot compile `.svelte` or `.vue` source files
+directly. If you're using the Svelte or Vue template, SSR must be **pre-built
+to `dist/ssr.js`** before `wrangler dev` / `wrangler deploy` runs. The React
+template compiles inline because Wrangler's esbuild handles `.tsx`.
+
+## `c.header()` headers are dropped on custom Responses
+
+When a handler returns a custom `Response` (e.g. a redirect), Hono drops
+headers queued via `c.header()` / `setCookie()`. Cookie helpers in Kilat
+append to `c.res.headers` instead, which the `context.res` setter merges into
+the returned response.
+
+If your Set-Cookie isn't landing, make sure you're using `setSessionCookie(c, …)`
+(append-based), not `c.header("set-cookie", …)`.
+
+## Guards must call `next()`
+
+A guard middleware that returns `undefined` without calling `next()` errors
+with "Context is not finalized". Always end the success path explicitly:
+
+```ts
+export const requireAuth = async (c, next) => {
+  if (!c.var.user) return redirectTo(c.req.raw, "/login");
+  return next(); // ← required
+};
+```
+
+## `node:crypto` is not available
+
+Use the Web Crypto API instead: `crypto.subtle` (PBKDF2, hashing),
+`crypto.getRandomValues` (random bytes), `crypto.randomUUID` (IDs). The
+`nodejs_compat` flag is set but does not provide `node:crypto`.
+
+## Tests fail with stale state
+
+Run `bun test --isolate` — never plain `bun test`. Without `--isolate`, one
+file's `afterAll` teardown finalizes the next file's cached module values.
+See [Testing](./testing).

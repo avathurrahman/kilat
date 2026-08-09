@@ -1,0 +1,104 @@
+---
+title: Philosophy
+description: The principles behind every choice in Kilat — edge-native, deliberately boring, built for agents.
+---
+
+**Kilat** means *lightning* in Indonesian — and the name is the promise: code
+that runs fast, deploys fast, and is understood fast. Not "clever fast" —
+**predictably fast**. No surprises, no tricks that require the next maintainer
+to reverse-engineer intent. Whoever comes later — human or AI agent — should
+be able to understand the code, change it, and not be afraid of breaking it.
+
+## Edge-native, zero ops
+
+No Docker, no VPS, no process supervisor. The whole stack is Cloudflare
+Workers: `wrangler dev` for local, `wrangler deploy` for production. D1 is the
+database, Workers Static Assets serves the client bundle, Web Crypto handles
+password hashing. Setup is three steps — install Bun, `git clone`,
+`wrangler deploy` — and you have a running app with auth, migrations, and SSR
+on 300+ edge locations.
+
+## Deliberately boring
+
+Every choice trades "clever" for "obviously right". When two ways of doing the
+same thing exist, only one is kept — the simpler one. Route handlers are
+written inline in their route file instead of being split into abstract
+controllers. Boring? Yes. Followable at a glance? Far more.
+
+## Zero-dependency where it's cheap
+
+Every dependency is a liability: it must be upgraded, audited, and can break
+under you. When 60 lines of our own code are enough, we write them:
+
+- The rate limiter is a **no-op stub** (real limiting needs KV/Durable Objects
+  — add when you need it).
+- The Google OAuth client is **plain `fetch`** — no SDK.
+- CSS is **vanilla by default** — no framework.
+- The database layer is **raw D1 prepared statements** — no ORM.
+
+## One obvious way to do things
+
+Structure is standardized, on purpose:
+
+- Routes only live in `routes/<feature>.routes.ts`.
+- All SQL lives in `db.ts`.
+- Environment variables are read only in `config.ts`.
+
+No "structural creativity" — that is the point. When everyone writes the same
+way, anyone can find anything.
+
+## Discoverability as a contract
+
+Given a URL you can name the file that owns it: `/login` →
+`routes/auth.routes.ts`, `/profile` → `routes/profile.routes.ts`. Every URL
+lives in exactly one file, with its GET render and POST actions together.
+Paste a broken URL and you land in exactly one place — no guessing.
+
+## Production-grade guardrails, not a production app
+
+The infrastructure a deployed app needs — CSRF, security headers, versioned
+migrations, PBKDF2 password hashing, session management — is wired from day
+one, not scaffolded. What is missing is your business logic, and that is the
+point: you start from a skeleton that already works, not one you have to
+harden.
+
+## Correctness over cleverness
+
+Explicitly typed, parameterized queries; fail-fast configuration;
+deterministic tests. Prefer the boring implementation that is obviously
+correct over the clever one that is hard to verify.
+
+## Built for AI agents
+
+The "next maintainer" includes the agent writing the next feature — which, in
+this project, is the main way the code evolves. That is why conventions are
+codified where agents read them (`AGENTS.md`), validation errors have exact,
+documented shapes (TypeBox), mistakes fail at compile time (`strict` +
+`noUncheckedIndexedAccess`), and the test suite runs deterministically as the
+safety net. A codebase an agent can extend without inventing conventions is a
+codebase that stays coherent.
+
+## Kilat vs Dulak — same philosophy, different runtime
+
+[Dulak](https://github.com/maulanashalihin/dulak) is the sibling project — the
+Bun version of the same philosophy. Same deliberately-boring, zero-ops,
+one-obvious-way ethos; different runtime:
+
+| | Kilat | Dulak |
+| --- | --- | --- |
+| Runtime | Cloudflare Workers | Bun |
+| Database | D1 (async SQLite at the edge) | `bun:sqlite` (sync, local) |
+| Password hashing | PBKDF2 / Web Crypto (100K cap) | argon2 |
+| Build | esbuild (client + SSR) | `Bun.build` |
+| Deploy | `wrangler deploy` | Docker / VPS |
+| Config | `wrangler.toml` `[vars]` | `.env` |
+| Rate limiting | no-op stub | in-memory Map |
+
+Same philosophy, different tradeoffs forced by the runtime. See
+[Kilat vs. other frameworks](/comparisons/) for the full comparison.
+
+## Next steps
+
+- [Kilat vs. other frameworks](/comparisons/) — why Kilat, and why not a meta-framework.
+- [Architecture overview](/architecture/overview/) — how the principles shape the layout.
+- [Building with AI agents](/getting-started/ai-agents/) — the agent-first design in depth.
