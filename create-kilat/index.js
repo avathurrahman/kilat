@@ -71,6 +71,7 @@ const ALL_TEMPLATES = FRAMEWORKS.flatMap((fw) =>
 const CLEANUP = [
   ".playwright-mcp",
   "create-kilat",
+  "site",
   ".env",
   ".env.example",
   "*.png",
