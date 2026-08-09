@@ -13,7 +13,7 @@
  * here is Hono-specific beyond the type names.
  */
 import type { Page } from "@inertiajs/core";
-import { renderPage } from "../client/ssr";
+import { renderPage } from "../../dist/ssr.js";
 import type { FlashData, SharedPageProps } from "../shared/types";
 import { config } from "./config";
 import { clearFlash } from "./auth";
