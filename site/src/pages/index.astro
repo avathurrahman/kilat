@@ -1,0 +1,79 @@
+---
+import "../styles/landing.css";
+import Hero from "../components/Hero.astro";
+import StatsStrip from "../components/StatsStrip.astro";
+import FeatureGrid from "../components/FeatureGrid.astro";
+import WhyKilat from "../components/WhyKilat.astro";
+import TemplateShowcase from "../components/TemplateShowcase.astro";
+import Faq from "../components/Faq.astro";
+---
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <meta name="color-scheme" content="dark" />
+    <title>Kilat — Edge-native full-stack starter for Cloudflare Workers</title>
+    <meta property="og:title" content="Kilat — Edge-native full-stack starter for Cloudflare Workers" />
+    <meta property="og:description" content="Cloudflare Workers + Hono + D1 + Inertia v3 (in-process SSR). Auth, migrations, tests — wired end to end. Deploy to 300+ edge locations." />
+    <meta name="twitter:title" content="Kilat — Edge-native full-stack starter for Cloudflare Workers" />
+    <meta name="twitter:description" content="Cloudflare Workers + Hono + D1 + Inertia v3 (in-process SSR). Auth, migrations, tests — wired end to end." />
+    <meta name="description" content="Edge-native full-stack starter — Cloudflare Workers + Hono + D1 + Inertia v3 with in-process SSR." />
+    <meta property="og:image" content="/og-image.webp" />
+    <meta property="og:type" content="website" />
+    <meta name="twitter:card" content="summary_large_image" />
+    <meta name="twitter:image" content="/og-image.webp" />
+    <link rel="icon" href="/favicon.svg" />
+  </head>
+  <body>
+    <header class="dl-nav">
+      <a class="dl-nav-brand" href="/">
+        <img src="/favicon.svg" alt="" width="24" height="24" />
+        <span>Kilat</span>
+      </a>
+      <nav class="dl-nav-links">
+        <a href="/getting-started/introduction/">Docs</a>
+        <a href="/blog/">Notes</a>
+        <a href="https://github.com/maulanashalihin/kilat" target="_blank" rel="noreferrer">GitHub</a>
+      </nav>
+    </header>
+
+    <main>
+      <Hero />
+      <StatsStrip />
+      <FeatureGrid />
+      <WhyKilat />
+      <TemplateShowcase />
+      <Faq />
+    </main>
+
+    <footer class="dl-footer">
+      <div class="dl-footer-grid">
+        <div class="dl-footer-brand">
+          <div class="dl-footer-logo">
+            <img src="/favicon.svg" alt="" width="20" height="20" />
+            <span>Kilat</span>
+          </div>
+          <p>An edge-native full-stack starter. Workers, Hono, D1, Inertia — one deploy, 300+ edge locations.</p>
+        </div>
+        <div class="dl-footer-col">
+          <h4>Docs</h4>
+          <a href="/getting-started/introduction/">Getting Started</a>
+          <a href="/architecture/overview/">Architecture</a>
+          <a href="/deployment/">Deployment</a>
+          <a href="/database/schema-migrations/">Database</a>
+        </div>
+        <div class="dl-footer-col">
+          <h4>More</h4>
+          <a href="/comparisons/">Comparisons</a>
+          <a href="/philosophy/">Philosophy</a>
+          <a href="/blog/">Notes</a>
+          <a href="https://github.com/maulanashalihin/kilat" target="_blank" rel="noreferrer">GitHub</a>
+        </div>
+      </div>
+      <div class="dl-footer-bottom">
+        <span>Kilat — the Indonesian word for <em>lightning</em>.</span>
+        <span>MIT License</span>
+      </div>
+    </footer>
+  </body>
+</html>

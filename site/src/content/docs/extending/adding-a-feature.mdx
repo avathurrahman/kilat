@@ -1,0 +1,153 @@
+---
+title: Adding a feature
+description: Step-by-step guide to adding a new route, query, page, and migration.
+---
+
+This walkthrough adds a fictional **"posts"** feature end to end, following the
+conventions in `AGENTS.md`. The same pattern applies to any new URL namespace.
+
+## 1. Add the route file
+
+Create `src/server/routes/posts.routes.ts`. One file per URL namespace — GET
+renders and POST actions live together.
+
+```ts
+import { Type as t } from "@sinclair/typebox";
+import { Hono } from "hono";
+import { requireAuth } from "../auth";
+import { createPost, listPosts } from "../db";
+import type { AppEnv } from "../inertia-middleware";
+import { validateJson } from "../validation";
+
+const postBody = t.Object(
+  { title: t.String({ minLength: 1 }), body: t.String({ minLength: 1 }) },
+  { additionalProperties: false },
+);
+
+export const postsRoutes = () => {
+  const app = new Hono<AppEnv>();
+
+  app.get("/posts", requireAuth, async (c) => {
+    const posts = await listPosts();
+    return c.var.inertia.render("Posts", { posts });
+  });
+
+  app.post("/posts", requireAuth, validateJson(postBody), async (c) => {
+    const body = c.req.valid("json");
+    await createPost(body.title, body.body, c.var.user!.id);
+    return c.var.inertia.redirect("/posts");
+  });
+
+  return app;
+};
+```
+
+Mount it in `src/server/app.ts`:
+
+```ts
+app.route("/", postsRoutes());
+```
+
+### Conventions
+
+- Export `const <feature>Routes = () => new Hono<AppEnv>()…` — a factory
+  taking no arguments.
+- Route-specific logic stays inline; extract a module only when reused across
+  routes.
+- `pages.routes.ts` is the app shell only (`/`, `/dashboard`, `/admin`). New
+  feature pages do **not** go there.
+- Infra endpoints (`/health`) stay in `app.ts`.
+
+## 2. Add SQL in db.ts
+
+All SQL lives in `src/server/db.ts` as async query functions. Never scatter
+queries across feature folders.
+
+```ts
+export const createPost = (title: string, body: string, userId: number) =>
+  d1
+    .prepare("INSERT INTO posts (title, body, user_id) VALUES (?, ?, ?) RETURNING id")
+    .bind(title, body, userId)
+    .first<{ id: number }>();
+
+export const listPosts = async () =>
+  (await d1.prepare("SELECT id, title, body FROM posts ORDER BY id DESC").all<PostRow>()).results;
+```
+
+Use parameterized binds (`?`) — never string interpolation. All queries are
+`async` / `await`.
+
+## 3. Add a validation schema (TypeBox)
+
+Validate request bodies at the route level with TypeBox schemas in
+`src/server/validation.ts` (or inline in the route file). `app.onError` maps
+`ValidationFailed` to Inertia 422 payloads.
+
+```ts
+const postBody = t.Object(
+  { title: t.String({ minLength: 1 }), body: t.String({ minLength: 1 }) },
+  { additionalProperties: false },
+);
+```
+
+`additionalProperties: false` keeps strict-by-default behavior. The `email`
+string format is pre-registered in `validation.ts`; add other formats there.
+
+## 4. Add the page component
+
+Create `src/client/pages/Posts.tsx`:
+
+```tsx
+export default function Posts({ posts }: { posts: Post[] }) {
+  return (
+    <ul>
+      {posts.map((p) => <li key={p.id}>{p.title}</li>)}
+    </ul>
+  );
+}
+```
+
+Register it in `src/client/pages.ts` (explicit imports, no auto-discovery):
+
+```ts
+import Posts from "./pages/Posts";
+export const pages = { /* … */, Posts };
+```
+
+Co-locate styles in a sibling `Posts.css` imported by the component — never
+add page-specific rules to `styles.css` (global base only).
+
+## 5. Add a migration (if needed)
+
+If the feature needs a new table, add a numbered SQL file:
+
+```sh
+# migrations/0005_posts.sql
+CREATE TABLE IF NOT EXISTS posts (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  title TEXT NOT NULL,
+  body TEXT NOT NULL,
+  user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+  created_at TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ', 'now'))
+);
+```
+
+Apply locally:
+
+```sh
+bun run db:migrate
+```
+
+Never edit an applied migration — always add a new numbered file.
+
+## 6. Verify
+
+```sh
+bun run build         # client bundle
+bun run typecheck     # tsc --noEmit
+bun run test          # bun test --isolate
+bun run dev           # smoke-test in the browser
+```
+
+Follow `AGENTS.md` throughout — it exists to keep new code structurally
+consistent with the existing architecture.

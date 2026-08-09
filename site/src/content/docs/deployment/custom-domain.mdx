@@ -1,0 +1,61 @@
+---
+title: Custom domain
+description: Add a custom domain or route to your Worker via the Cloudflare dashboard.
+---
+
+By default your Worker is reachable at `https://<name>.<account>.workers.dev`.
+To serve it from your own domain, use the Cloudflare dashboard — no DNS records
+to manually create when using the Custom Domain feature.
+
+## Add a Custom Domain
+
+1. Go to the **Cloudflare dashboard → Workers & Pages**.
+2. Click your Worker (e.g. **kilat**).
+3. Go to **Settings → Domains & Routes**.
+4. Click **Add Custom Domain** (or **Add Route**).
+5. Enter your domain, e.g. `kilat.example.com`.
+6. Cloudflare automatically creates the necessary DNS record and provisions
+   the TLS certificate — usually within minutes.
+
+That's it. Traffic to `kilat.example.com` now routes to your Worker at the edge.
+
+## Route vs. Custom Domain
+
+| Option          | When to use                                          |
+| --------------- | ---------------------------------------------------- |
+| **Custom Domain** | Domain on Cloudflare DNS; fully managed TLS        |
+| **Route**       | Pattern-based (e.g. `example.com/api/*`); zone must be on Cloudflare |
+
+Custom Domains are simplest for a full app — one domain, automatic TLS, no
+wildcard patterns.
+
+## Update APP_URL
+
+After adding the domain, update `APP_URL` in `wrangler.toml` `[vars]` to the
+new URL — it drives email reset links and the Google OAuth redirect URI:
+
+```toml
+[vars]
+APP_URL = "https://kilat.example.com"
+```
+
+## Update the Google OAuth redirect URI
+
+If you use Google OAuth, add the new callback URL in the Google Cloud Console:
+
+```
+https://kilat.example.com/auth/google/callback
+```
+
+You can keep the old `*.workers.dev` URI as well for staging.
+
+## Re-deploy
+
+```sh
+bun run build
+wrangler deploy
+```
+
+The `APP_URL` change takes effect on the next deploy. The Custom Domain itself
+is active as soon as Cloudflare provisions the certificate — no re-deploy
+needed for the routing, but the env var change does require a deploy.

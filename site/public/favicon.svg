@@ -1,0 +1,6 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 32 32">
+  <!-- Kilat mark: lightning bolt — "kilat" = lightning in Indonesian. -->
+  <rect width="32" height="32" rx="8" fill="#059669"/>
+  <path d="M17.5 4 8 18h6l-2.5 10L22 14h-6l1.5-10Z"
+        fill="#ffffff" stroke="none"/>
+</svg>

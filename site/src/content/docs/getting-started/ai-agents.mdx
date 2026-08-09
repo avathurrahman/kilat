@@ -1,0 +1,109 @@
+---
+title: Building with AI agents
+description: How Kilat is designed so AI agents can extend the codebase without inventing conventions.
+---
+
+Kilat is built for the next maintainer — and the next maintainer is often an
+AI agent writing the next feature. That's not an afterthought; it shapes the
+codebase. The goal: a codebase an agent can extend **without inventing
+conventions**, so it stays coherent as it evolves.
+
+## AGENTS.md codifies conventions
+
+[`AGENTS.md`](https://github.com/maulanashalihin/kilat/blob/main/AGENTS.md)
+is the file agents read before writing, moving, or restructuring code. It
+codifies the layout rules so new code stays structurally consistent — previous
+contributions broke the architecture by inventing their own layout, and this
+file exists to stop that.
+
+The rules are hard, not advisory:
+
+1. **Routes live in `src/server/routes/<feature>.routes.ts`**, handlers
+   inline, one file per URL. Never create a `routes.ts` inside a feature
+   folder.
+2. **`src/server/` is flat except `routes/`.** No feature subfolders. Extract
+   a module only when logic is reused across routes.
+3. **All SQL lives in `db.ts`** as async query functions via the D1 binding.
+   Schema changes are new numbered files in `migrations/`.
+4. **Env is read per-request via `initConfig(env)`** in `config.ts`. Never
+   read `process.env` elsewhere — Workers doesn't expose it.
+5. **Validation via TypeBox schemas** at the route level.
+6. **TypeScript**: `strict` + `noUncheckedIndexedAccess` +
+   `verbatimModuleSyntax`. Type-only imports use `import type`.
+7. **CSS is co-located**, not centralised — `styles.css` holds only global
+   base.
+
+## TypeBox validation with exact error shapes
+
+Validation uses [TypeBox](https://github.com/sinclairzx/typebox) schemas at the
+route level. When validation fails, `app.onError` maps `ValidationFailed` to
+422 Inertia page payloads with field-level errors:
+
+```ts
+// src/server/validation.ts
+import { TypeCompiler } from "@sinclair/typebox/compiler";
+
+export class ValidationFailed extends Error {
+  constructor(public errors: ValueError[]) { super("Validation failed"); }
+}
+
+export function validate<T>(schema: TSchema, value: unknown): T {
+  const result = TypeCompiler.Compile(schema).Check(value);
+  if (!result) {
+    const errors = [...TypeCompiler.Compile(schema).Errors(value)];
+    throw new ValidationFailed(errors);
+  }
+  return value as T;
+}
+```
+
+The error shape is exact and documented — `{ field: message }` mapped back to
+the form component that owns the URL. An agent adding a route knows precisely
+what the error response looks like without reading the handler.
+
+## Strict TypeScript
+
+`tsconfig.json` enables `strict`, `noUncheckedIndexedAccess`, and
+`verbatimModuleSyntax`. Mistakes fail at compile time:
+
+- No loose `any` — queries are parameterized and typed.
+- Array access returns `T | undefined` — agents can't forget null checks.
+- Type-only imports MUST use `import type` — or the build fails.
+
+Run `bun run typecheck` (`tsc --noEmit`) before finishing any change.
+
+## Deterministic tests
+
+```bash
+bun test --isolate   # or: bun run test
+```
+
+The suite boots the Hono app and drives it through `app.request()`:
+registration/login/logout, guards and roles, password reset end to end,
+Inertia protocol (409/404/SSR), CSRF, `/health`.
+
+`--isolate` is required — each test file sets its env in `beforeAll` as if
+process-isolated. Without it, one file's teardown leaks into the next file's
+cached values. The tests are the safety net: an agent can change code and
+verify it didn't break the contract.
+
+## The layout rules, summarized
+
+| Concern | Where it lives |
+| --- | --- |
+| Routes | `src/server/routes/<feature>.routes.ts` |
+| SQL queries | `src/server/db.ts` (single file) |
+| Env / config | `src/server/config.ts` (`initConfig(env)`) |
+| Validation | TypeBox schemas at the route level |
+| CSS | Co-located `.css` next to the component/page |
+| Schema changes | `migrations/000N_*.sql` (never edit applied) |
+
+Given a URL, the file name follows from its first segment — `/login` →
+`routes/auth.routes.ts`, `/profile` → `routes/profile.routes.ts`. That's the
+discoverability contract: paste a broken URL and land in exactly one place.
+
+## Next steps
+
+- [Conventions](/architecture/conventions/) — the full rule set in depth.
+- [Architecture overview](/architecture/overview/) — the `src/` layout.
+- [Adding a feature](/extending/adding-a-feature/) — step-by-step walkthrough.
