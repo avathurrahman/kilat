@@ -1,0 +1,105 @@
+---
+title: Sessions & guards
+description: PBKDF2 password hashing, DB-backed sessions, and route guards in Kilat.
+---
+
+Kilat ships a complete auth layer in `src/server/auth.ts` — password hashing via
+Web Crypto, DB-backed sessions with httpOnly cookies, and composable route guards.
+No external auth library is required.
+
+## Password hashing (PBKDF2)
+
+Passwords are hashed with **PBKDF2-HMAC-SHA256** using the Web Crypto API
+(`crypto.subtle`), not `node:crypto` (which is unavailable on Workers).
+
+```ts
+const PBKDF2_ITERATIONS = 100_000; // Workers caps PBKDF2 at 100K iterations
+
+export async function hashPassword(password: string): Promise<string> { /* … */ }
+export async function verifyPassword(password: string, stored: string): Promise<boolean> { /* … */ }
+```
+
+### Why 100K, not 600K?
+
+OWASP recommends 600K iterations for PBKDF2-HMAC-SHA256, but **Cloudflare
+Workers caps PBKDF2 at 100K iterations** — requesting 600K throws
+`NotSupportedError`. 100K is still OWASP-acceptable for PBKDF2-HMAC-SHA256 and
+runs within the Workers CPU budget. Do not raise this number.
+
+The stored format embeds the salt and iteration count, so `verifyPassword`
+parses them back out — future parameter changes stay backward-compatible.
+
+## DB-backed sessions
+
+Sessions live in the `sessions` D1 table, not in signed cookies or JWTs.
+
+### Session tokens
+
+- **256-bit random** (`crypto.getRandomValues`), hex-encoded into the cookie.
+- The **raw token never touches the DB** — only its **SHA-256 hash** is stored
+  (`token_hash` is the primary key). A database leak cannot expose valid
+  session tokens.
+- Token rotation on login/register defends against session fixation.
+
+```ts
+export async function createSession(userId: number): Promise<SessionInfo> { /* … */ }
+export async function resolveUser(token: string | null | undefined): Promise<UserRow | null> { /* … */ }
+export async function deleteSessionByToken(token: string): Promise<void> { /* … */ }
+```
+
+### Cookie attributes
+
+The `session` cookie is set with:
+
+| Attribute   | Value                              |
+| ----------- | ---------------------------------- |
+| `httpOnly`  | `true` (no JS access)              |
+| `sameSite`  | `Lax` (blocks cross-site POSTs)    |
+| `secure`    | `true` in production only          |
+| `path`      | `/`                                |
+| `maxAge`    | 30 days (`SESSION_TTL_MS`)         |
+
+```ts
+export const SESSION_COOKIE = "session";
+export const SESSION_TTL_MS = 30 * 24 * 60 * 60 * 1000; // 30 days
+```
+
+`secure` follows `config.isProd` — local dev over `http://` still works.
+
+### Flash messages
+
+One-shot flash messages (e.g. "Welcome back!") are stored as JSON on the
+session row and consumed on the next render via `readFlash` / `setFlash` /
+`clearFlash`.
+
+## Route guards
+
+Guards are Hono middleware in `auth.ts`. They short-circuit with a redirect
+`Response` or call `next()` to continue the chain.
+
+```ts
+import { requireAuth, guestOnly, requireRole } from "../auth";
+
+// Require a logged-in user — redirects to /login otherwise.
+app.get("/dashboard", requireAuth, (c) => c.var.inertia.render("Dashboard"));
+
+// Only for guests — redirects logged-in users to /dashboard.
+app.get("/login", guestOnly, (c) => c.var.inertia.render("Login"));
+
+// Role-gated — non-admins redirect to /dashboard.
+app.get("/admin", requireAuth, requireRole("admin"), (c) => /* … */);
+```
+
+| Guard                    | Behavior                                            |
+| ------------------------ | --------------------------------------------------- |
+| `requireAuth`            | No user → redirect to `/login`                      |
+| `guestOnly`              | User present → redirect to `/dashboard`             |
+| `requireRole('admin')`   | No user → `/login`; wrong role → `/dashboard`       |
+
+`requireRole` is a factory — pass one or more roles: `requireRole('admin')`,
+`requireRole('admin', 'editor')`.
+
+### Guards must call `next()`
+
+A guard that returns `undefined` without calling `next()` errors with
+"Context is not finalized". Always end the success path with `return next()`.
