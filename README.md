@@ -96,6 +96,47 @@ of breaking it.
 
 ## Quick start
 
+The fastest way to start a new Kilat project is the scaffolder:
+
+```bash
+bun create kilat my-app
+```
+
+The interactive prompt lets you pick a **framework** (React 19, Svelte 5,
+Vue 3) and a **styling** approach (vanilla CSS or Tailwind CSS v4) via
+arrow-key navigation. It downloads the template, patches `wrangler.toml`,
+renames `package.json`, and runs `bun install` for you.
+
+```bash
+bun create kilat my-app --template svelte-tailwind   # skip prompts
+bun create kilat .                                    # use current dir
+bun create kilat my-app --no-install                  # skip bun install
+```
+
+Then:
+
+```bash
+cd my-app
+bun run db:migrate    # create local D1 schema
+bun run build         # build client assets + SSR bundle
+bun run dev           # http://localhost:8787
+```
+
+### Templates
+
+| Template            | Stack                              | Branch                    |
+| ------------------- | ---------------------------------- | ------------------------- |
+| `default`           | React 19 + vanilla CSS             | `main`                    |
+| `react-tailwind`    | React 19 + Tailwind CSS v4         | `template/react-tailwind` |
+| `svelte-vanilla`    | Svelte 5 + scoped `<style>` CSS    | `template/svelte-vanilla` |
+| `svelte-tailwind`   | Svelte 5 + Tailwind CSS v4         | `template/svelte-tailwind`|
+| `vue-vanilla`       | Vue 3 + scoped `<style>` CSS       | `template/vue-vanilla`    |
+| `vue-tailwind`      | Vue 3 + Tailwind CSS v4            | `template/vue-tailwind`   |
+
+### Manual clone
+
+Alternatively, clone directly:
+
 ```bash
 git clone https://github.com/maulanashalihin/kilat.git my-app
 cd my-app
@@ -348,10 +389,16 @@ read-only copies to the nearest edge automatically.
 
 ## Styling
 
-**Vanilla CSS by design** (`src/client/styles.css`, ~6KB): design tokens via
-CSS variables, light/dark via `prefers-color-scheme`, no framework. Chosen
-to keep the starter zero-dependency and zero extra build steps — the CSS is
-bundled and content-hashed by the same esbuild pipeline as the JS.
+Kilat ships **six template variants** — pick one via the scaffolder:
+
+- **Vanilla CSS** (`default`, `svelte-vanilla`, `vue-vanilla`): design tokens
+  via CSS variables, light/dark via `[data-theme]`, co-located `<style>` or
+  scoped CSS. Zero-dependency, zero extra build steps — the CSS is bundled
+  and content-hashed by the same esbuild pipeline as the JS.
+- **Tailwind CSS v4** (`react-tailwind`, `svelte-tailwind`, `vue-tailwind`):
+  utility classes, `@theme inline` bridging CSS vars to Tailwind tokens so
+  dark mode auto-switches at runtime. Tailwind v4 CLI runs as a pre-build
+  step in `scripts/build.ts`.
 
 ## Notes / decisions
 
