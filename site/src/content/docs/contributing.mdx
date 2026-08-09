@@ -1,0 +1,80 @@
+---
+title: Contributing
+description: Fork, branch, follow AGENTS.md, and keep docs in sync with code.
+---
+
+Contributions are welcome. The codebase is small and opinionated — please
+follow the existing conventions so new code stays structurally consistent.
+
+## Fork and clone
+
+```sh
+git clone https://github.com/<your-username>/kilat.git
+cd kilat
+bun install
+```
+
+## Create a branch
+
+```sh
+git checkout -b feat/my-feature
+```
+
+Use a descriptive prefix: `feat/`, `fix/`, `docs/`, `chore/`.
+
+## Follow AGENTS.md
+
+Read [`AGENTS.md`](https://github.com/maulanashalihin/kilat/blob/main/AGENTS.md)
+before writing code. It documents the hard rules that keep the architecture
+intact:
+
+- **Routes** live in `src/server/routes/<feature>.routes.ts` — one file per URL
+  namespace, handlers inline, GET renders and POST actions together.
+- **`src/server/` is flat** except `routes/`. No feature subfolders. Extract a
+  module only when logic is reused across routes.
+- **All SQL lives in `db.ts`** as async query functions. Schema changes are new
+  numbered migration files — never edit an applied migration.
+- **Env is read per-request** via `initConfig(env)` in `config.ts`. Never read
+  `process.env` in other modules.
+- **Validation via TypeBox** at the route level.
+- **TypeScript**: `strict` + `noUncheckedIndexedAccess` + `verbatimModuleSyntax`.
+  Type-only imports use `import type`. No ORM, no `any`.
+- **CSS is co-located** — `styles.css` is global base only; component/page
+  styles live in sibling `.css` files.
+
+## Run checks before submitting
+
+```sh
+bun run typecheck   # tsc --noEmit
+bun run test        # bun test --isolate
+```
+
+Both must be green. Also rebuild and smoke-test in the browser if you touched
+the client — a green build + green tests does **not** mean the page works
+(check the browser console for runtime errors).
+
+```sh
+bun run build && bun run dev
+```
+
+## Keep docs in sync with code
+
+If your change alters behavior, config, or conventions, update the
+documentation in `site/src/content/docs/` to match. Docs that describe
+behavior that no longer exists are worse than no docs.
+
+Check:
+
+- The relevant page under `auth/`, `deployment/`, `database/`, `extending/`
+- `troubleshooting.mdx` if you hit and fixed a Workers-specific pitfall
+- The sidebar in `site/astro.config.mjs` if you add a new page
+
+## Submit
+
+1. Push your branch.
+2. Open a pull request against `main`.
+3. Describe what changed and why. Reference any related issues.
+4. Ensure CI (typecheck + tests) passes.
+
+Keep changes minimal and conventional — delete dead code rather than leaving
+shims or aliases behind a rename.

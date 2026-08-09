@@ -1,0 +1,117 @@
+---
+title: Configuration
+description: wrangler.toml vars, secrets, D1 binding, and the nodejs_compat flag.
+---
+
+Kilat is configured through `wrangler.toml` and Wrangler secrets. There is no
+`.env` file in production — Workers reads env vars from the `env` binding, not
+`process.env`.
+
+## wrangler.toml
+
+```toml
+name = "kilat"
+main = "src/worker.ts"
+compatibility_date = "2025-07-01"
+compatibility_flags = ["nodejs_compat"]
+
+[vars]
+NODE_ENV = "production"
+APP_URL = "https://kilat.bisnis-maulanashalihin.workers.dev"
+SSR = "true"
+MAIL_DRIVER = "log"
+MAIL_FROM = "no-reply@example.com"
+
+[[d1_databases]]
+binding = "DB"
+database_id = "bd0f2555-332c-4a2c-bd56-7fae6827de87"
+database_name = "kilat"
+migrations_dir = "migrations"
+
+[assets]
+directory = "./dist"
+binding = "ASSETS"
+not_found_handling = "none"
+run_worker_first = ["/*", "!/assets/*"]
+```
+
+## [vars] — non-secret environment
+
+Public config lives under `[vars]`. These are checked into git and read
+per-request by `initConfig(env)` in `src/server/config.ts`.
+
+| Var           | Purpose                                              | Default                        |
+| ------------- | ---------------------------------------------------- | ------------------------------ |
+| `NODE_ENV`    | `production` enables `secure` cookies                | —                              |
+| `APP_URL`     | Absolute base URL — email links, OAuth redirect URIs | `http://localhost:8787`        |
+| `SSR`         | `false` disables server-side rendering (client-only) | `true`                         |
+| `MAIL_DRIVER` | `log` \| `resend` \| `mailtrap`                      | `log`                          |
+| `MAIL_FROM`   | From address for outgoing email                      | `no-reply@example.com`         |
+
+Adding a config key means updating **three places**: `config.ts` (the `EnvVars`
+interface + `initConfig`), `wrangler.toml` `[vars]`, and the README env table.
+
+## Secrets — sensitive values
+
+Never put secrets in `wrangler.toml` (it's committed to git). Use Wrangler's
+encrypted secrets, stored separately on Cloudflare:
+
+```sh
+wrangler secret put RESEND_API_KEY
+wrangler secret put GOOGLE_CLIENT_ID
+wrangler secret put GOOGLE_CLIENT_SECRET
+wrangler secret put MAILTRAP_API_TOKEN
+```
+
+For local dev, put them in `.dev.vars` (gitignored):
+
+```
+RESEND_API_KEY=re_xxxxx
+GOOGLE_CLIENT_ID=xxxxx
+GOOGLE_CLIENT_SECRET=xxxxx
+```
+
+Secrets arrive in the same `env` binding as `[vars]` — `initConfig(env)` reads
+them identically. `config.ts` validates relationships (e.g.
+`MAIL_DRIVER=resend` requires `RESEND_API_KEY`; Google ID and secret must be set
+together).
+
+## D1 binding
+
+```toml
+[[d1_databases]]
+binding = "DB"
+database_id = "bd0f2555-332c-4a2c-bd56-7fae6827de87"
+database_name = "kilat"
+migrations_dir = "migrations"
+```
+
+`binding = "DB"` exposes the database as `env.DB` in the Worker.
+`initDb(env.DB)` runs per-request in `src/worker.ts` to set the module-level
+`d1` reference used by `db.ts`. All queries are async:
+`await env.DB.prepare(sql).bind(...).first()`.
+
+## ASSETS binding
+
+```toml
+[assets]
+directory = "./dist"
+binding = "ASSETS"
+run_worker_first = ["/*", "!/assets/*"]
+```
+
+Static assets (the esbuild output in `dist/`) are served via the Workers Static
+Assets binding, not a custom handler. `run_worker_first` routes everything
+through the Worker **except** `/assets/*`, which bypass directly to the static
+binding for maximum speed.
+
+## nodejs_compat
+
+```toml
+compatibility_flags = ["nodejs_compat"]
+```
+
+Enables a subset of Node.js APIs on Workers. However, **prefer the Web Crypto
+API** (`crypto.subtle`, `crypto.getRandomValues`, `crypto.randomUUID`) for
+crypto operations — `node:crypto` is not available. `nodejs_compat` is mainly
+for libraries that expect Node globals.

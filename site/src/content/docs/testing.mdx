@@ -1,0 +1,101 @@
+---
+title: Testing
+description: bun test --isolate E2E suite driving the full Hono app via app.request().
+---
+
+Kilat ships an end-to-end test suite in `tests/app.test.ts` using `bun:test`.
+It boots the full Hono app and drives it through `app.request()` — no HTTP
+server, no Workers runtime, just the app logic with an in-memory D1.
+
+## Run the tests
+
+```sh
+bun test --isolate
+# or
+bun run test
+```
+
+### `--isolate` is required
+
+**Never run plain `bun test`.** Bun 1.3 runs all test files in one shared
+process, but each suite sets its `env` in `beforeAll` and calls cleanup in
+`afterAll` as if process-isolated. Without `--isolate`, one file's teardown
+finalizes the next file's cached values — tests fail with stale state.
+
+`--isolate` gives each file its own module registry, so `initConfig` /
+`initDb` / `db.close()` run cleanly per suite.
+
+## Suite structure
+
+```ts
+import { afterAll, beforeAll, describe, expect, it } from "bun:test";
+
+let app: Awaited<ReturnType<typeof import("../src/server/app")["createApp"]>>;
+
+beforeAll(async () => {
+  // set env, initConfig, create in-memory D1, apply schema, createApp
+});
+
+afterAll(async () => {
+  // db.close()
+});
+```
+
+The helper `call(path, options)` builds a `Request` and invokes
+`app.request()` directly — same code path a real Worker takes, minus the
+network.
+
+## What's covered
+
+### Auth basics
+
+- Registration creates a user and sets a session cookie
+- Login with correct credentials → 303 redirect to `/dashboard`
+- Login with wrong credentials → 422 with "credentials do not match"
+- Logout clears the session and cookie
+
+### Guards & roles
+
+- `requireAuth` redirects unauthenticated users to `/login`
+- `guestOnly` redirects authenticated users to `/dashboard`
+- `requireRole('admin')` blocks non-admins from `/admin` (302 → `/dashboard`)
+- Admin page serves paginated users with `meta.total` and `currentPage`
+
+### Password reset (log mail driver)
+
+- `/forgot-password` answers identically for known and unknown emails (no
+  enumeration)
+- End-to-end reset: email sent → token extracted from `sentMails` → new
+  password set → old password fails, new password works
+- Mismatched password confirmation → 422
+- Expired/invalid tokens → 422 with "invalid or has expired"
+
+### Inertia protocol
+
+- Version mismatch (`x-inertia-version: stale`) → **409** +
+  `X-Inertia-Location` header
+- Unknown routes → **404** with `NotFound` component payload
+- XHR with `accept-encoding: gzip` → valid JSON (compress middleware must not
+  consume small bodies)
+- Full browser request → SSR HTML with `data-server-rendered="true"`
+- Authenticated routes skip SSR (client-only render via `data-page`)
+
+### CSRF
+
+- Cross-origin POST (`Origin: https://evil.example`) → **403**
+
+### Infrastructure
+
+- `GET /health` → `{ status: "ok" }`
+- `/assets/*` serves static files with correct content-type
+- `/auth/google` returns 400 when unconfigured, 302 to Google when configured
+
+## Before submitting
+
+```sh
+bun run typecheck   # tsc --noEmit (covers src/ and scripts/)
+bun run test        # bun test --isolate
+```
+
+Both must be green. `tsc` does not cover `tests/` — the test runner catches
+type issues there.

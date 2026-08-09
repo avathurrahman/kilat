@@ -1,0 +1,278 @@
+---
+---
+
+<div class="dl-hero">
+  <div class="dl-aurora" aria-hidden="true">
+    <span class="dl-aurora-blob a1"></span>
+    <span class="dl-aurora-blob a2"></span>
+    <span class="dl-aurora-blob a3"></span>
+  </div>
+
+  <div class="dl-hero-inner">
+    <div class="dl-bolt">
+      <svg viewBox="0 0 32 32" width="52" height="52" aria-hidden="true">
+        <rect width="32" height="32" rx="8" fill="#059669" />
+        <path d="M17.5 4 8 18h6l-2.5 10L22 14h-6l1.5-10Z" fill="#fff" />
+      </svg>
+    </div>
+
+    <h1 class="dl-title">
+      Edge-native. <span class="dl-accent">Zero ops.</span><br />
+      A full-stack starter that runs at the speed of light.
+    </h1>
+
+    <p class="dl-tagline">
+      One <strong>Cloudflare Worker</strong>: <strong>Hono</strong> +
+      <strong>D1</strong> + <strong>Inertia v3</strong> with in-process SSR.
+      React, Svelte, or Vue — your choice. Auth, migrations, tests — wired end
+      to end. <code>wrangler deploy</code> and you're live on 300+ edge locations.
+    </p>
+
+    <div class="dl-actions">
+      <a class="dl-btn dl-btn-primary" href="/getting-started/introduction/">Get started</a>
+      <a class="dl-btn dl-btn-ghost" href="https://github.com/maulanashalihin/kilat" target="_blank" rel="noreferrer">
+        View on GitHub
+      </a>
+    </div>
+
+    <div class="dl-terminal" aria-label="Quick start">
+      <div class="dl-terminal-bar">
+        <span class="dl-dot r"></span><span class="dl-dot y"></span><span class="dl-dot g"></span>
+        <span class="dl-terminal-title">zsh</span>
+      </div>
+      <div class="dl-terminal-body">
+        <div class="dl-line"><span class="dl-prompt">➜</span> <span class="dl-typing" id="dl-typing"></span><span class="dl-cursor" id="dl-cursor"></span></div>
+        <div class="dl-line dl-out o1"><span class="dl-dim">◆  Select a JavaScript framework:</span></div>
+        <div class="dl-line dl-out o2"><span class="dl-dim">│  ○ React 19</span></div>
+        <div class="dl-line dl-out o3"><span class="dl-dim">│  ● Svelte 5</span></div>
+        <div class="dl-line dl-out o4"><span class="dl-dim">│  ○ Vue 3</span></div>
+        <div class="dl-line dl-out o5"><span class="dl-dim">│  ↑/↓ to navigate • Enter: confirm</span></div>
+        <div class="dl-line dl-out o6"><span class="dl-dim">◆  Select a styling approach:</span></div>
+        <div class="dl-line dl-out o7"><span class="dl-dim">│  ● Vanilla CSS</span></div>
+        <div class="dl-line dl-out o8"><span class="dl-dim">│  ○ Tailwind CSS v4</span></div>
+        <div class="dl-line dl-out o9"><span class="dl-dim">↓ Downloading Kilat (Svelte 5 + Vanilla CSS)...</span></div>
+        <div class="dl-line dl-out o10"><span class="dl-ok">└  Kilat project created!  Svelte 5 + Vanilla CSS</span></div>
+      </div>
+    </div>
+
+    <div class="dl-chips">
+      <span>Workers</span><span>Hono</span><span>Inertia v3</span><span>D1</span><span>Web Crypto</span>
+    </div>
+  </div>
+</div>
+
+<script>
+  const el = document.getElementById("dl-typing");
+  const cursor = document.getElementById("dl-cursor");
+  if (el && cursor) {
+    const text = "bun create kilat@latest my-app";
+    let i = 0;
+    const tick = () => {
+      if (i <= text.length) {
+        el.textContent = text.slice(0, i);
+        i++;
+        setTimeout(tick, 45 + Math.random() * 60);
+      } else {
+        cursor.style.display = "none";
+        document.querySelectorAll(".dl-out").forEach((o, idx) => {
+          o.style.animationDelay = `${0.35 + idx * 0.22}s`;
+          o.classList.add("show");
+        });
+      }
+    };
+    tick();
+  }
+</script>
+
+<style>
+  .dl-hero {
+    position: relative;
+    overflow: hidden;
+    padding: 5rem 1.5rem 3rem;
+    text-align: center;
+  }
+
+  .dl-aurora {
+    position: absolute;
+    inset: 0;
+    pointer-events: none;
+    overflow: hidden;
+  }
+  .dl-aurora-blob {
+    position: absolute;
+    border-radius: 50%;
+    filter: blur(80px);
+    opacity: 0.4;
+  }
+  .dl-aurora-blob.a1 {
+    width: 400px; height: 400px;
+    background: #059669;
+    top: -100px; left: 10%;
+    animation: dl-float 8s ease-in-out infinite;
+  }
+  .dl-aurora-blob.a2 {
+    width: 300px; height: 300px;
+    background: #10b981;
+    top: 50px; right: 5%;
+    animation: dl-float 10s ease-in-out infinite reverse;
+  }
+  .dl-aurora-blob.a3 {
+    width: 250px; height: 250px;
+    background: #047857;
+    bottom: -50px; left: 40%;
+    animation: dl-float 12s ease-in-out infinite;
+  }
+  @keyframes dl-float {
+    0%, 100% { transform: translate(0, 0); }
+    50% { transform: translate(30px, -20px); }
+  }
+
+  .dl-hero-inner {
+    position: relative;
+    max-width: 720px;
+    margin: 0 auto;
+  }
+
+  .dl-bolt {
+    display: flex;
+    justify-content: center;
+    margin-bottom: 1.5rem;
+  }
+
+  .dl-title {
+    font-size: 2.4rem;
+    font-weight: 800;
+    letter-spacing: -0.03em;
+    line-height: 1.15;
+    color: #f3f4f6;
+    margin: 0 0 1rem;
+  }
+  @media (max-width: 640px) {
+    .dl-title { font-size: 1.8rem; }
+  }
+
+  .dl-accent { color: #34d399; }
+
+  .dl-tagline {
+    font-size: 1.05rem;
+    line-height: 1.65;
+    color: #9aa4b2;
+    max-width: 580px;
+    margin: 0 auto 1.8rem;
+  }
+  .dl-tagline strong { color: #d3dae4; font-weight: 600; }
+  .dl-tagline code {
+    font-family: "SF Mono", "Fira Code", monospace;
+    font-size: 0.9em;
+    color: #34d399;
+    background: rgba(5, 150, 105, 0.1);
+    padding: 0.15rem 0.4rem;
+    border-radius: 0.3rem;
+  }
+
+  .dl-actions {
+    display: flex;
+    gap: 0.75rem;
+    justify-content: center;
+    margin-bottom: 2.5rem;
+  }
+  .dl-btn {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.4rem;
+    padding: 0.7rem 1.6rem;
+    border-radius: 0.55rem;
+    font-weight: 600;
+    font-size: 0.92rem;
+    text-decoration: none;
+    transition: transform 0.15s ease, box-shadow 0.15s ease;
+  }
+  .dl-btn:hover { transform: translateY(-1px); }
+  .dl-btn-primary {
+    background: #047857;
+    color: #fff;
+    box-shadow: 0 8px 24px rgba(5, 150, 105, 0.35);
+  }
+  .dl-btn-primary:hover {
+    box-shadow: 0 12px 32px rgba(5, 150, 105, 0.5);
+  }
+  .dl-btn-ghost {
+    border: 1px solid #263041;
+    color: #d3dae4;
+    background: rgba(15, 17, 23, 0.6);
+  }
+  .dl-btn-ghost:hover { background: rgba(30, 41, 59, 0.8); }
+
+  /* Terminal */
+  .dl-terminal {
+    max-width: 520px;
+    margin: 0 auto 2rem;
+    border: 1px solid #1f2937;
+    border-radius: 0.6rem;
+    overflow: hidden;
+    background: #0a0e14;
+    text-align: left;
+  }
+  .dl-terminal-bar {
+    display: flex;
+    align-items: center;
+    gap: 0.4rem;
+    padding: 0.5rem 0.8rem;
+    background: #11161e;
+    border-bottom: 1px solid #1f2937;
+  }
+  .dl-dot { width: 10px; height: 10px; border-radius: 50%; }
+  .dl-dot.r { background: #ef4444; }
+  .dl-dot.y { background: #eab308; }
+  .dl-dot.g { background: #22c55e; }
+  .dl-terminal-title {
+    margin-left: 0.5rem;
+    font-size: 0.75rem;
+    color: #6b7280;
+  }
+  .dl-terminal-body {
+    padding: 0.8rem 1rem;
+    font-family: "SF Mono", "Fira Code", monospace;
+    font-size: 0.82rem;
+    line-height: 1.7;
+  }
+  .dl-prompt { color: #34d399; }
+  .dl-typing { color: #d3dae4; }
+  .dl-cursor {
+    display: inline-block;
+    width: 8px;
+    height: 1em;
+    background: #34d399;
+    vertical-align: text-bottom;
+    animation: dl-blink 1s step-end infinite;
+  }
+  @keyframes dl-blink {
+    50% { opacity: 0; }
+  }
+  .dl-line.dl-out {
+    opacity: 0;
+    transform: translateY(4px);
+    transition: opacity 0.3s ease, transform 0.3s ease;
+  }
+  .dl-line.dl-out.show {
+    opacity: 1;
+    transform: translateY(0);
+  }
+  .dl-dim { color: #6b7280; }
+  .dl-ok { color: #34d399; }
+
+  .dl-chips {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.5rem;
+    justify-content: center;
+  }
+  .dl-chips span {
+    font-size: 0.78rem;
+    color: #8b95a5;
+    border: 1px solid #1f2937;
+    border-radius: 0.4rem;
+    padding: 0.25rem 0.7rem;
+    background: #0f141a;
+  }
+</style>
