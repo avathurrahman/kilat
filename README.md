@@ -6,12 +6,15 @@ The Indonesian word for *lightning* — a full-stack edge starter that runs at t
 [![Cloudflare Workers](https://img.shields.io/badge/runtime-Cloudflare_Workers-F38020?logo=cloudflare&logoColor=white)](https://workers.cloudflare.com/)
 [![Hono](https://img.shields.io/badge/Hono-4.x-FF6B35?logo=hono&logoColor=white)](https://hono.dev/)
 [![D1](https://img.shields.io/badge/D1-SQLite_at_the_edge-059669)](https://developers.cloudflare.com/d1/)
+[![Vue 3](https://img.shields.io/badge/Vue-3-42b883?logo=vuedotjs&logoColor=white)](https://vuejs.org/)
+[![Tailwind CSS v4](https://img.shields.io/badge/Tailwind_CSS-v4-06b6d4?logo=tailwindcss&logoColor=white)](https://tailwindcss.com/)
 
 A full-stack starter running entirely on **Cloudflare Workers**: **Hono** for
 HTTP, **D1** for data, **Inertia v3** for server-driven UI with **in-process
-SSR** — React 19 `renderToString` runs inside the Worker bundle — with auth,
-roles, migrations, and zero-config deploys. No Docker, no VPS, no reverse
-proxy. `wrangler deploy` and you're live on 300+ edge locations.
+SSR** — Vue 3 `renderToString` (`@vue/server-renderer`) runs inside a
+pre-built SSR bundle (`dist/ssr.js`) — with auth, roles, migrations, and
+zero-config deploys. No Docker, no VPS, no reverse proxy. `wrangler deploy`
+and you're live on 300+ edge locations.
 
 ```mermaid
 flowchart LR
@@ -20,13 +23,14 @@ flowchart LR
     Worker -->|initConfig, initDb| Config
     Worker -->|session, flash| Auth
     Worker -->|page payloads| InertiaAdapter
-    InertiaAdapter -->|renderToString| ReactSSR
+    InertiaAdapter -->|renderToString| VueSSR
     Worker -->|SQL| D1[(D1)]
   end
-  ReactSSR --> Browser
+  VueSSR --> Browser
   Google -->|OAuth callback| Worker
   Mail -->|reset emails| Worker
   subgraph Static Assets
+    TailwindCLI --> esbuild
     esbuild --> dist
   end
   dist -.->|ASSETS binding| Browser
@@ -58,8 +62,8 @@ of breaking it.
   it must be upgraded, audited, and can break under you. When 60 lines of
   our own code are enough, we write them: the rate limiter is a no-op stub
   (real limiting needs KV/DO — add when you need it), the Google OAuth
-  client is plain `fetch` (no SDK), CSS is vanilla by default, and the
-  database layer is raw D1 prepared statements — no ORM.
+  client is plain `fetch` (no SDK), and the database layer is raw D1
+  prepared statements — no ORM.
 
 - **One obvious way to do things.** Structure is standardized, on purpose:
   routes only live in `routes/<feature>.routes.ts`, all SQL lives in
@@ -131,7 +135,7 @@ bun run dev           # http://localhost:8787
 | `svelte-vanilla`    | Svelte 5 + scoped `<style>` CSS    | `template/svelte-vanilla` |
 | `svelte-tailwind`   | Svelte 5 + Tailwind CSS v4         | `template/svelte-tailwind`|
 | `vue-vanilla`       | Vue 3 + scoped `<style>` CSS       | `template/vue-vanilla`    |
-| `vue-tailwind`      | Vue 3 + Tailwind CSS v4            | `template/vue-tailwind`   |
+| **`vue-tailwind`**  | **Vue 3 + Tailwind CSS v4**        | `template/vue-tailwind`   |
 
 ### Manual clone
 
@@ -170,12 +174,12 @@ bun run deploy       # https://<your-worker>.<your-subdomain>.workers.dev
 | Command             | What it does                                              |
 | ------------------- | --------------------------------------------------------- |
 | `bun run dev`       | Wrangler dev server (local D1 + Workers runtime)          |
-| `bun run build`     | esbuild client assets → `dist/` (+ `manifest.json`)       |
+| `bun run build`     | Tailwind CLI pre-step + two esbuild passes (client + SSR) → `dist/` (+ `manifest.json`, `dist/ssr.js`) |
 | `bun run deploy`    | `wrangler deploy` to Cloudflare Workers edge              |
 | `bun run db:migrate`     | Apply D1 migrations locally                          |
 | `bun run db:migrate:remote` | Apply D1 migrations to remote (production)        |
 | `bun run db:seed`   | Create a demo user (`[email] [password] [role]` args)     |
-| `bun run typecheck` | `tsc --noEmit`                                            |
+| `bun run typecheck` | `vue-tsc --noEmit`                                        |
 | `bun run test`      | E2E suite (`bun test --isolate`)                          |
 
 ## Features
@@ -262,20 +266,22 @@ src/
 │       ├── pages.routes.ts        # app-shell pages: /, /dashboard, /admin
 │       └── profile.routes.ts      # /profile page + /profile/avatar
 ├── client/
-│   ├── app.tsx             # Inertia client bootstrap (hydrate or render)
-│   ├── ssr.tsx             # in-process SSR renderer (react-dom/server)
+│   ├── app.ts              # Inertia client bootstrap (createApp/createSSRApp)
+│   ├── ssr.ts              # in-process SSR renderer (@vue/server-renderer) — pre-built to dist/ssr.js
 │   ├── pages.ts            # explicit page registry (shared by SSR + bundle)
 │   ├── pages/              # Login, Register, Dashboard, ForgotPassword,
-│   │                       # ResetPassword, Admin, NotFound, Profile
-│   ├── components/         # Layout, AuthLayout, Brand, Field
-│   └── styles.css          # plain CSS, light/dark
+│   │                       # ResetPassword, Admin, NotFound, Profile (.vue)
+│   ├── components/         # Layout, AuthLayout, Brand, Field (.vue)
+│   ├── styles.css          # global base: tokens, reset, shared UI primitives
+│   └── tailwind.css        # Tailwind v4 entry: @import, @theme inline, dark variant
 ├── shared/
 │   ├── types.ts            # User, Role, FlashData, SharedPageProps, Paginated
 │   └── inertia.d.ts        # InertiaConfig augmentation → typed props.auth
 ├── migrations/             # versioned SQL schema files (0001, 0002, …)
 └── tests/                  # bun:test E2E suite
 scripts/
-├── build.ts                # esbuild: bundle client → dist/assets/app-[hash].js + CSS
+├── build.ts                # esbuild: Tailwind CLI pre-step + two passes (client + SSR) → dist/assets/app-[hash].js + CSS, dist/ssr.js
+├── vue-plugin.ts           # esbuild plugin: compiles .vue SFCs (client + SSR modes)
 └── seed.ts                 # wrangler d1 execute kilat --local + hashPassword
 wrangler.toml               # Workers config: D1 binding, ASSETS binding, nodejs_compat, env vars
 dist/                       # build output (gitignored), served by Workers Static Assets
@@ -301,8 +307,13 @@ dist/                       # build output (gitignored), served by Workers Stati
   `409 + X-Inertia-Location` on asset-version mismatch; partial reloads via
   `X-Inertia-Partial-*`; one-shot flash and shared props merged per page.
 - **SSR + hydration**: `renderPage()` renders with
-  `createInertiaApp({ page, render: renderToString })`; the client hydrates
-  when `data-server-rendered` is present. Same page registry on both sides.
+  `createSSRApp` + `@vue/server-renderer`'s `renderToString`; the client
+  hydrates with `createApp` when `data-server-rendered` is present. The SSR
+  bundle is pre-built to `dist/ssr.js` (`vuePlugin({ ssr: true })`) because
+  Wrangler's internal esbuild cannot compile `.vue` SFCs — `inertia.ts`
+  imports it from `../../dist/ssr.js`. A Tailwind CLI pre-step
+  (`bunx @tailwindcss/cli`) generates `.tailwind.css` before the esbuild
+  passes. Same page registry on both sides.
 - **Asset versioning**: esbuild emits content-hashed files; the hash is
   the Inertia `version`. Stale clients get a 409 and reload. Run
   `bun run build` before `wrangler dev` or `wrangler deploy` when assets
@@ -400,6 +411,20 @@ Kilat ships **six template variants** — pick one via the scaffolder:
   dark mode auto-switches at runtime. Tailwind v4 CLI runs as a pre-build
   step in `scripts/build.ts`.
 
+This template (`vue-tailwind`) uses **Tailwind CSS v4 + scoped `<style>`**:
+
+- `tailwind.css` is the Tailwind entry point: `@import "tailwindcss"`,
+  `@custom-variant dark` for dark mode, and `@theme inline` bridging the
+  CSS variables from `styles.css` into Tailwind tokens so dark mode
+  auto-switches at runtime.
+- The Tailwind CLI runs as a pre-build step
+  (`bunx @tailwindcss/cli -i src/client/tailwind.css -o src/client/.tailwind.css --minify`),
+  producing `.tailwind.css` which is imported by `app.ts`.
+- `styles.css` holds only global base: design tokens, reset,
+  `:focus-visible`, and shared UI primitives.
+- Scoped `<style>` blocks in `.vue` SFCs are used for complex component
+  styles alongside Tailwind utilities.
+
 ## Notes / decisions
 
 - **Workers PBKDF2 cap**: Workers limits PBKDF2 to max 100K iterations
@@ -419,5 +444,14 @@ Kilat ships **six template variants** — pick one via the scaffolder:
   payload as inline JSON; external script injection is still blocked.
 - **`import.meta.glob` was removed from Bun 1.3** — the page registry uses
   explicit imports.
+- **SSR is pre-built to `dist/ssr.js`**: Wrangler's internal esbuild cannot
+  compile `.vue` SFCs, so `scripts/build.ts` runs a second esbuild pass
+  (`vuePlugin({ ssr: true })`) that emits `dist/ssr.js`. `inertia.ts`
+  imports `renderPage` from `../../dist/ssr.js` — run `bun run build` before
+  `wrangler dev` or the import fails.
+- **Tailwind CLI pre-build step**: `scripts/build.ts` invokes
+  `bunx @tailwindcss/cli -i src/client/tailwind.css -o src/client/.tailwind.css --minify`
+  before the esbuild passes. The generated `.tailwind.css` is imported by
+  `app.ts`; never edit it by hand.
 - **Run `bun run build` before `wrangler dev`** if assets have changed —
   the Worker imports `dist/manifest.json` at module load.
