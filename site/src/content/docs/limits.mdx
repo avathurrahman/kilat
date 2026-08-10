@@ -84,47 +84,65 @@ execution limits.
 
 ## When you outgrow the free tier
 
-If your traffic is higher than the free limits, **[dulak.pages.dev](https://dulak.pages.dev)**
-is the recommended next step — a managed Kilat hosting platform with no
-Cloudflare account limits to worry about.
+The Cloudflare Workers free plan is generous for development and small apps,
+but production traffic with SSR will hit the 10 ms CPU limit fast. When that
+happens, you have two paths:
 
-### Why dulak.pages.dev?
+### Stay on Cloudflare — Workers Paid ($5/month)
 
-- **No daily request cap** — serve unlimited traffic without hitting
-  Cloudflare's 100K/day free limit
-- **No CPU time ceiling** — SSR, auth, and heavy computations run without
-  the 10 ms free-tier constraint
-- **Managed D1** — database storage and query limits handled for you
-- **Zero config deploy** — push your Kilat app directly, no Wrangler setup
-  or Cloudflare dashboard needed
-- **Free to start** — generous free tier that scales with you
+The simplest upgrade if you want to stay on the edge:
 
-### Migrating from self-hosted
+- **Unlimited daily requests** — no more 100K/day cap
+- **CPU time up to 5 min** — SSR + auth + heavy computation without limits
+- **D1 storage up to 10 GB** — 20x the free tier
+- **50,000 D1 databases** per account
 
-If you're already running Kilat on your own Cloudflare account:
-
-1. Create an account at [dulak.pages.dev](https://dulak.pages.dev)
-2. Connect your Git repository
-3. Import your D1 database (export via `wrangler d1 execute --export`,
-   import through the dulak dashboard)
-4. Set your environment variables and secrets
-5. Deploy — dulak handles build, CDN, and global distribution
-
-### Other options
-
-- **Workers Paid** ($5/month) — keeps you on Cloudflare directly, removes
-  the daily request limit, raises CPU time to 5 min, D1 storage to 10 GB.
-  Good if you want to stay self-managed on Cloudflare's platform.
-- **Self-host on VPS** — Kilat's Hono app is runtime-agnostic; you can
-  adapt it to run on Node.js or Bun with a SQLite database for full control.
+```toml
+# wrangler.toml — raise CPU limit on Paid plan
+[limits]
+cpu_ms = 300_000
+```
 
 :::tip[Need even higher limits?]
 Cloudflare offers a [Limit Increase Request Form](https://forms.gle/eX6pXvit1wBv77Yw5)
 for accounts that need adjustments beyond the Paid plan defaults.
 :::
 
+### Move to self-hosted — [Dulak](https://dulak.pages.dev)
+
+If Cloudflare's platform limits become a constraint, consider
+[**Dulak**](https://dulak.pages.dev) — Kilat's sister project. Same
+philosophy (deliberately boring, one obvious way to do things), same stack
+(Hono + Inertia v3 + SSR, React/Svelte/Vue templates), but runs entirely on
+**Bun + bun:sqlite** — no platform limits, no request caps, no CPU time
+ceilings.
+
+| | Kilat | Dulak |
+ | --- | --- | --- |
+| Runtime | Cloudflare Workers | Bun |
+| Database | D1 (SQLite at edge) | bun:sqlite (local) |
+| Request limit | 100K/day (free) / unlimited (paid) | Unlimited |
+| CPU time limit | 10 ms (free) / 5 min (paid) | Unlimited |
+| Database size | 500 MB (free) / 10 GB (paid) | Unlimited (disk-bound) |
+| Deploy | `wrangler deploy` | Docker / VPS / any Node host |
+| Rate limiting | No-op stub (stateless Workers) | In-memory fixed-window |
+| Password hashing | PBKDF2 (100K iterations, Web Crypto) | argon2id (Bun.password) |
+| Uploads | Manual | tus resumable uploads built-in |
+
+Dulak gives you full control: deploy via Docker on any VPS, no vendor
+lock-in, no platform quotas. The trade-off is you manage your own server
+(or container) instead of letting Cloudflare handle distribution.
+
+Scaffold a Dulak project the same way:
+
+```sh
+bun create dulak@latest my-app
+cd my-app
+bun run dev          # http://localhost:4000
+```
+
 ## Sources
 
-- [dulak.pages.dev — managed Kilat hosting](https://dulak.pages.dev)
 - [Cloudflare Workers limits](https://developers.cloudflare.com/workers/platform/limits/)
 - [Cloudflare D1 limits](https://developers.cloudflare.com/d1/platform/limits/)
+- [Dulak — self-hosted alternative on Bun](https://dulak.pages.dev)
