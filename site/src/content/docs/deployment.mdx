@@ -47,11 +47,9 @@ anything.
 1. **Set your secrets** — `wrangler secret put` for `RESEND_API_KEY`,
    `GOOGLE_CLIENT_ID`, `GOOGLE_CLIENT_SECRET`, etc. See
    [Configuration](./configuration).
-2. **Set `APP_URL`** in `wrangler.toml` `[vars]` to your production URL — it
-   drives email links and OAuth redirect URIs.
-3. **Set `NODE_ENV = "production"`** — enables `secure` cookies and production
+2. **Set `NODE_ENV = "production"`** — enables `secure` cookies and production
    behavior.
-4. **Run migrations** with `--remote` (not `--local`) — your local D1 is a
+3. **Run migrations** with `--remote` (not `--local`) — your local D1 is a
    separate database.
 
 ## Deploying updates

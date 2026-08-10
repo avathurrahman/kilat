@@ -297,7 +297,8 @@ export function clearOAuthStateCookie(c: Context<AppEnv>): void {
 
 const redirectTo = (request: Request, path: string) => {
   const url = safeUrl(request.url);
-  url.protocol = safeUrl(config.appUrl).protocol;
+  // No scheme correction needed — on Workers, request.url already has the
+  // correct scheme (https://) because the Worker runs after TLS termination.
   return new Response(null, { status: 302, headers: { location: new URL(path, url.toString()).toString() } });
 };
 

@@ -7,7 +7,7 @@ import mdx from "@astrojs/mdx";
 // `site` is used for canonical URLs — set it to the production domain
 // before deploying.
 export default defineConfig({
-  site: "https://kilat.pages.dev",
+  site: "https://kilatjs.pages.dev",
   integrations: [
     starlight({
       plugins: [
