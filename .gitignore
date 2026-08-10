@@ -8,6 +8,9 @@ data/uploads/
 .playwright-mcp/
 *.png
 .llm-wiki/meta/
+.llm-wiki/raw/
+.llm-wiki/outputs/
+.llm-wiki/.discoveries/
 .wrangler/
 .svelte-css-cache/
 src/client/.tailwind.css
