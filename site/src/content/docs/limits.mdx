@@ -84,17 +84,39 @@ execution limits.
 
 ## When you outgrow the free tier
 
-If your traffic is higher than the free limits, consider:
+If your traffic is higher than the free limits, **[dulak.pages.dev](https://dulak.pages.dev)**
+is the recommended next step — a managed Kilat hosting platform with no
+Cloudflare account limits to worry about.
 
-1. **Upgrade to Workers Paid** ($5/month) — removes the daily request limit,
-   raises CPU time to 5 min, D1 storage to 10 GB. This is the simplest path.
+### Why dulak.pages.dev?
 
-2. **Self-host on VPS** — if you need more control or want to avoid
-   platform lock-in, Kilat's Hono app is runtime-agnostic. You can adapt it
-   to run on Node.js or Bun with a SQLite database.
+- **No daily request cap** — serve unlimited traffic without hitting
+  Cloudflare's 100K/day free limit
+- **No CPU time ceiling** — SSR, auth, and heavy computations run without
+  the 10 ms free-tier constraint
+- **Managed D1** — database storage and query limits handled for you
+- **Zero config deploy** — push your Kilat app directly, no Wrangler setup
+  or Cloudflare dashboard needed
+- **Free to start** — generous free tier that scales with you
 
-3. **Deploy to `dulak.pages.dev`** — an alternative deployment target if
-   you need more headroom without a full Cloudflare Paid plan.
+### Migrating from self-hosted
+
+If you're already running Kilat on your own Cloudflare account:
+
+1. Create an account at [dulak.pages.dev](https://dulak.pages.dev)
+2. Connect your Git repository
+3. Import your D1 database (export via `wrangler d1 execute --export`,
+   import through the dulak dashboard)
+4. Set your environment variables and secrets
+5. Deploy — dulak handles build, CDN, and global distribution
+
+### Other options
+
+- **Workers Paid** ($5/month) — keeps you on Cloudflare directly, removes
+  the daily request limit, raises CPU time to 5 min, D1 storage to 10 GB.
+  Good if you want to stay self-managed on Cloudflare's platform.
+- **Self-host on VPS** — Kilat's Hono app is runtime-agnostic; you can
+  adapt it to run on Node.js or Bun with a SQLite database for full control.
 
 :::tip[Need even higher limits?]
 Cloudflare offers a [Limit Increase Request Form](https://forms.gle/eX6pXvit1wBv77Yw5)
@@ -103,5 +125,6 @@ for accounts that need adjustments beyond the Paid plan defaults.
 
 ## Sources
 
+- [dulak.pages.dev — managed Kilat hosting](https://dulak.pages.dev)
 - [Cloudflare Workers limits](https://developers.cloudflare.com/workers/platform/limits/)
 - [Cloudflare D1 limits](https://developers.cloudflare.com/d1/platform/limits/)
