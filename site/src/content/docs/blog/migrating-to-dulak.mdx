@@ -14,6 +14,28 @@ platform limits.
 When you hit Cloudflare's free tier limits (10 ms CPU, 100K requests/day,
 500 MB D1), migrating to Dulak gives you unlimited everything on your own
 VPS. The good news: **the database schema is identical**.
+:::tip[Don't want to do it manually?]
+Copy-paste this prompt into your AI agent (Cursor, Claude, etc.) and it
+will handle the entire migration for you:
+
+```
+Migrate my app from Cloudflare Workers (Kilat) to Dulak (Bun + bun:sqlite).
+
+Steps:
+1. Read my wrangler.toml to get the D1 database name
+2. Export the production D1 database: `wrangler d1 execute <database-name> --remote --export ./backup.sql`
+3. Scaffold a new Dulak project with `bun create dulak@latest` — use the same template (framework + CSS) as my current app
+4. Copy my client-side pages and components into the Dulak project
+5. Start the Dulak dev server so migrations run automatically (bun run dev)
+6. Import the exported data into Dulak's bun:sqlite using the backup.sql file
+7. Copy my uploaded files from R2 or HTTP into Dulak's ./data/uploads/ directory
+8. Create a .env file in the Dulak project with the same env vars from my wrangler.toml and secrets
+9. Update the password hashing in src/server/auth.ts to keep PBKDF2 compatibility (or plan a password reset)
+10. Update db.ts: change D1 async prepare().bind().first() to bun:sqlite sync prepare().get()
+11. Update Google OAuth redirect URI in Google Cloud Console to the new domain
+12. Tell me what changed and what I need to test before deploying
+```
+:::
 
 ## Why migrate?
 
