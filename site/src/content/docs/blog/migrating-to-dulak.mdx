@@ -1,0 +1,171 @@
+---
+title: Migrating from Kilat to Dulak
+date: 2026-08-10
+excerpt: Move your Kilat app from Cloudflare Workers + D1 to Dulak's Bun + bun:sqlite — same stack, no platform limits, full self-hosted control.
+authors: maulana
+tags: ["dulak", "migration", "deployment"]
+---
+
+Kilat runs on Cloudflare Workers + D1. [Dulak](https://dulak.pages.dev) is
+its sister project — same philosophy, same stack (Hono + Inertia v3 + SSR,
+React/Svelte/Vue templates), but runs on **Bun + bun:sqlite** with no
+platform limits.
+
+When you hit Cloudflare's free tier limits (10 ms CPU, 100K requests/day,
+500 MB D1), migrating to Dulak gives you unlimited everything on your own
+VPS. The good news: **the database schema is identical**.
+
+## Why migrate?
+
+| | Kilat (Workers) | Dulak (Bun) |
+| --- | --- | --- |
+| CPU time | 10 ms (free) / 5 min (paid) | Unlimited |
+| Requests | 100K/day (free) | Unlimited |
+| Database | D1 (500 MB free) | bun:sqlite (disk-bound) |
+| Rate limiting | No-op stub | In-memory fixed-window |
+| Password hashing | PBKDF2 (Web Crypto) | argon2id (Bun.password) |
+| Uploads | Manual | tus resumable, built-in |
+| Deploy | `wrangler deploy` | Docker / VPS |
+
+## Step 1: Scaffold a Dulak project
+
+```sh
+bun create dulak@latest my-app
+cd my-app
+bun run dev          # http://localhost:4000
+```
+
+Pick the same template you used with Kilat (React/Svelte/Vue, vanilla/Tailwind).
+The client-side code is compatible — your pages and components port over
+with minimal changes.
+
+## Step 2: Export your D1 data
+
+From your Kilat project, export the production database:
+
+```sh
+wrangler d1 execute kilat --remote --export ./backup.sql
+```
+
+This produces a SQL file with `INSERT` statements for all tables.
+
+## Step 3: Import into Dulak's bun:sqlite
+
+Dulak uses `bun:sqlite` with the **exact same schema** as Kilat — the
+migration files (`0001_users.sql` through `0004_uploads.sql`) are identical.
+
+```sh
+# Apply schema migrations (creates tables)
+bun run dev   # migrations run automatically on startup
+
+# Import your data
+bun -e "
+import { Database } from 'bun:sqlite';
+const db = new Database('./data/app.sqlite');
+const sql = await Bun.file('./backup.sql').text();
+db.exec(sql);
+db.close();
+console.log('Import complete');
+"
+```
+
+:::tip[Password hash compatibility]
+Kilat uses PBKDF2 (Web Crypto, 100K iterations). Dulak uses argon2id
+(`Bun.password`). Existing PBKDF2 hashes will **not** verify with
+`Bun.password.verify()`. You have two options:
+
+1. **Reset all passwords** — delete the `password_hash` values and send
+   reset emails. Users set new passwords on next login.
+2. **Keep PBKDF2 in Dulak** — replace `Bun.password.hash()` / `.verify()`
+   with Web Crypto's `crypto.subtle.deriveBits()` in `src/server/auth.ts`.
+   The code is already in Kilat's `auth.ts` — copy it over.
+
+:::
+
+## Step 4: Move uploaded files
+
+If your Kilat app has file uploads (avatars, etc.), copy them from
+production to Dulak's upload directory:
+
+```sh
+# If uploads are in R2
+wrangler r2 object get kilat-uploads/<filename> ./data/uploads/<filename>
+
+# Or download via HTTP from your Kilat app
+curl -o ./data/uploads/avatar-123.png https://your-kilat-app.workers.dev/uploads/avatar-123.png
+```
+
+Update the `path` column in the `uploads` table to point to the new local
+paths:
+
+```sql
+UPDATE uploads SET path = './data/uploads/' || id WHERE 1=1;
+```
+
+## Step 5: Move environment variables
+
+Dulak uses a `.env` file instead of Wrangler secrets. Map your Kilat config:
+
+| Kilat (wrangler.toml / secrets) | Dulak (.env) |
+| --- | --- |
+| `APP_URL` | `APP_URL` |
+| `GOOGLE_CLIENT_ID` | `GOOGLE_CLIENT_ID` |
+| `GOOGLE_CLIENT_SECRET` | `GOOGLE_CLIENT_SECRET` |
+| `RESEND_API_KEY` | `RESEND_API_KEY` |
+| `MAIL_DRIVER` | `MAIL_DRIVER` |
+| `DATABASE_PATH` | `DATABASE_PATH` (default: `./data/app.sqlite`) |
+| `PORT` | `PORT` (default: `4000`) |
+
+```sh
+cp .env.example .env
+# Edit .env with your values
+```
+
+## Step 6: Deploy Dulak
+
+### Option A: Docker (recommended)
+
+```sh
+docker compose up -d --build
+```
+
+Dulak ships with a multi-stage `Dockerfile` (`oven/bun:1.3-alpine`).
+The `./data` volume keeps your SQLite database across restarts.
+
+### Option B: VPS with systemd
+
+Follow the
+[Linux VPS guide](https://dulak.pages.dev/deployment/vps/) —
+Bun + systemd + Cloudflare (origin rule or tunnel), no reverse proxy needed.
+
+### Option C: Single binary
+
+```sh
+bun build --compile src/index.ts --outfile kilat-app
+./kilat-app
+```
+
+## Step 7: Update Google OAuth redirect
+
+Google OAuth redirect URIs are domain-specific. Update your
+[Google Cloud Console](https://console.cloud.google.com/apis/credentials)
+credentials:
+
+- **Old**: `https://your-app.workers.dev/auth/google/callback`
+- **New**: `https://your-vps-domain.com/auth/google/callback`
+
+## What ports over vs needs changes
+
+| What | Ports directly? | Notes |
+| --- | --- | --- |
+| Client pages (React/Svelte/Vue) | ✅ | Same Inertia v3 components |
+| Route handlers | ✅ | Same Hono routes, same SQL |
+| `db.ts` query functions | ⚠️ | Change `d1.prepare().bind().first()` → `db.prepare().get()` |
+| `config.ts` | ✅ | Same env vars, different reader |
+| Auth (sessions, CSRF, guards) | ✅ | Same logic, different password hash |
+| Migrations | ✅ | Identical SQL files |
+| Tests | ⚠️ | Dulak uses in-memory SQLite directly, no D1 mock needed |
+
+The main code change is in `db.ts`: D1's async `prepare().bind().first()`
+becomes bun:sqlite's sync `prepare().get()`. Dulak's `db.ts` already has
+this — use it as reference.

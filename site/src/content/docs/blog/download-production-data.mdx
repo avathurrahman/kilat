@@ -1,0 +1,104 @@
+---
+title: Download production D1 data to local
+date: 2026-08-10
+excerpt: Export your remote D1 database to a local SQLite file for debugging, backups, or offline development.
+authors: maulana
+tags: ["d1", "database", "deployment"]
+---
+
+When your Kilat app is live on Cloudflare, your D1 database lives at the edge.
+Here's how to pull that data down to your local machine for debugging,
+backups, or offline development.
+
+## The one-command export
+
+```sh
+wrangler d1 execute kilat --remote --command "SELECT * FROM users" --output users.json
+```
+
+This runs a SQL query against your **remote** D1 database and writes the
+results to a JSON file. Replace `kilat` with your D1 database name from
+`wrangler.toml`.
+
+## Export all tables
+
+Kilat has four tables: `users`, `sessions`, `password_resets`, and `uploads`.
+To export everything:
+
+```sh
+# Export each table to JSON
+wrangler d1 execute kilat --remote --command "SELECT * FROM users" --output export/users.json
+wrangler d1 execute kilat --remote --command "SELECT * FROM sessions" --output export/sessions.json
+wrangler d1 execute kilat --remote --command "SELECT * FROM password_resets" --output export/password_resets.json
+wrangler d1 execute kilat --remote --command "SELECT * FROM uploads" --output export/uploads.json
+```
+
+:::tip[Skip sessions and password resets]
+Sessions and password reset tokens are ephemeral — you usually only need
+`users` and `uploads` for a useful local copy. Sessions expire anyway, and
+reset tokens are single-use.
+:::
+
+## Import into local D1
+
+After exporting, push the data into your local D1 database:
+
+```sh
+# Apply migrations first (if local DB is empty)
+wrangler d1 migrations apply kilat --local
+
+# Import each table
+wrangler d1 execute kilat --local --file export/users.json
+wrangler d1 execute kilat --local --file export/sessions.json
+wrangler d1 execute kilat --local --file export/password_resets.json
+wrangler d1 execute kilat --local --file export/uploads.json
+```
+
+## Export as raw SQL
+
+If you prefer a SQL dump (like `pg_dump`), use the `--export` flag:
+
+```sh
+wrangler d1 execute kilat --remote --export ./backup.sql
+```
+
+This produces a `.sql` file with `INSERT` statements for all tables. To
+restore locally:
+
+```sh
+wrangler d1 execute kilat --local --file ./backup.sql
+```
+
+## Automate it
+
+Add a script to your `package.json`:
+
+```json
+{
+  "scripts": {
+    "db:pull": "wrangler d1 execute kilat --remote --export ./backup.sql && wrangler d1 execute kilat --local --file ./backup.sql"
+  }
+}
+```
+
+Then `bun run db:pull` syncs remote → local in one step.
+
+## What about uploaded files?
+
+D1 only stores database rows. If your app has file uploads (avatars, etc.),
+those live on disk or in R2 — not in D1. To download uploaded files from
+production, you'll need to fetch them via HTTP or sync from your R2 bucket:
+
+```sh
+# If using R2 for uploads
+wrangler r2 object get kilat-uploads/avatar-123.png ./local-uploads/avatar-123.png
+```
+
+## Caveats
+
+- **`--remote` hits your production database** — read queries are safe, but
+  never run `DELETE` or `UPDATE` with `--remote` unless you mean it.
+- **D1 export is not a full backup** — it exports data, not schema. Schema
+  lives in your `migrations/` folder, which is version-controlled.
+- **Large exports may time out** — D1 has a 30-second query duration limit.
+  For very large tables, export in chunks with `LIMIT` and `OFFSET`.
