@@ -30,12 +30,12 @@ internals.
 
 ## Kilat vs Dulak
 
-[Dulak](https://github.com/maulanashalihin/dulak) is the Bun version of the
-same philosophy. Same deliberately-boring, zero-ops ethos; different runtime
-forces different tradeoffs:
+[Dulak](https://dulak.pages.dev) is the Bun version of the same philosophy.
+Same deliberately-boring, zero-ops ethos; different runtime forces different
+tradeoffs:
 
 | | Kilat | Dulak |
-| --- | --- | --- |
+ | --- | --- | --- |
 | Runtime | Cloudflare Workers (serverless edge) | Bun (single process) |
 | Database | D1 (async SQLite at the edge) | `bun:sqlite` (sync, local) |
 | Password hashing | PBKDF2 / Web Crypto (100K cap) | argon2 |
@@ -45,9 +45,18 @@ forces different tradeoffs:
 | Rate limiting | no-op stub (stateless isolates) | in-memory Map |
 | Uploads | not included | tus-based uploads |
 | Compression | Wrangler auto-compresses | custom compress middleware |
+| CPU time limit | 10 ms (free) / 5 min (paid) | Unlimited |
+| Request limit | 100K/day (free) | Unlimited |
+| Database size | 500 MB (free) / 10 GB (paid) | Unlimited (disk-bound) |
 
-Pick Kilat if you want zero ops and global edge latency. Pick Dulak if you want
-a single long-lived process, sync DB access, and argon2.
+Pick Kilat if you want zero ops and global edge latency. Pick Dulak if you
+want a single long-lived process, sync DB access, argon2, and **no platform
+limits** — unlimited requests, unlimited CPU time, unlimited database size.
+
+Already running Kilat and hitting the free tier limits? The
+[Migrating from Kilat to Dulak](/blog/migrating-to-dulak/) guide walks
+through every step — and includes a copy-paste prompt you can give your
+AI agent to automate the whole migration.
 
 ## Kilat vs Laravel
 
