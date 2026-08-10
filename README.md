@@ -5,13 +5,16 @@ The Indonesian word for *lightning* — a full-stack edge starter that runs at t
 [![License: MIT](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE)
 [![Cloudflare Workers](https://img.shields.io/badge/runtime-Cloudflare_Workers-F38020?logo=cloudflare&logoColor=white)](https://workers.cloudflare.com/)
 [![Hono](https://img.shields.io/badge/Hono-4.x-FF6B35?logo=hono&logoColor=white)](https://hono.dev/)
+[![Svelte](https://img.shields.io/badge/Svelte-5-FF3E00?logo=svelte&logoColor=white)](https://svelte.dev/)
 [![D1](https://img.shields.io/badge/D1-SQLite_at_the_edge-059669)](https://developers.cloudflare.com/d1/)
 
 A full-stack starter running entirely on **Cloudflare Workers**: **Hono** for
 HTTP, **D1** for data, **Inertia v3** for server-driven UI with **in-process
-SSR** — React 19 `renderToString` runs inside the Worker bundle — with auth,
-roles, migrations, and zero-config deploys. No Docker, no VPS, no reverse
-proxy. `wrangler deploy` and you're live on 300+ edge locations.
+SSR** — Svelte 5 `render` from `svelte/server` runs inside the Worker bundle
+(SSR is pre-built to `dist/ssr.js` because Wrangler cannot compile `.svelte`
+files) — with auth, roles, migrations, and zero-config deploys. No Docker, no
+VPS, no reverse proxy. `wrangler deploy` and you're live on 300+ edge
+locations.
 
 ```mermaid
 flowchart LR
@@ -20,10 +23,10 @@ flowchart LR
     Worker -->|initConfig, initDb| Config
     Worker -->|session, flash| Auth
     Worker -->|page payloads| InertiaAdapter
-    InertiaAdapter -->|renderToString| ReactSSR
+    InertiaAdapter -->|render| SvelteSSR
     Worker -->|SQL| D1[(D1)]
   end
-  ReactSSR --> Browser
+  SvelteSSR --> Browser
   Google -->|OAuth callback| Worker
   Mail -->|reset emails| Worker
   subgraph Static Assets
@@ -128,7 +131,7 @@ bun run dev           # http://localhost:8787
 | ------------------- | ---------------------------------- | ------------------------- |
 | `default`           | React 19 + vanilla CSS             | `main`                    |
 | `react-tailwind`    | React 19 + Tailwind CSS v4         | `template/react-tailwind` |
-| `svelte-vanilla`    | Svelte 5 + scoped `<style>` CSS    | `template/svelte-vanilla` |
+| **`svelte-vanilla`**    | **Svelte 5 + scoped `<style>` CSS**    | `template/svelte-vanilla` |
 | `svelte-tailwind`   | Svelte 5 + Tailwind CSS v4         | `template/svelte-tailwind`|
 | `vue-vanilla`       | Vue 3 + scoped `<style>` CSS       | `template/vue-vanilla`    |
 | `vue-tailwind`      | Vue 3 + Tailwind CSS v4            | `template/vue-tailwind`   |
@@ -170,12 +173,12 @@ bun run deploy       # https://<your-worker>.<your-subdomain>.workers.dev
 | Command             | What it does                                              |
 | ------------------- | --------------------------------------------------------- |
 | `bun run dev`       | Wrangler dev server (local D1 + Workers runtime)          |
-| `bun run build`     | esbuild client assets → `dist/` (+ `manifest.json`)       |
+| `bun run build`     | Two esbuild passes: client assets → `dist/` (+ `manifest.json`); SSR bundle → `dist/ssr.js` |
 | `bun run deploy`    | `wrangler deploy` to Cloudflare Workers edge              |
 | `bun run db:migrate`     | Apply D1 migrations locally                          |
 | `bun run db:migrate:remote` | Apply D1 migrations to remote (production)        |
 | `bun run db:seed`   | Create a demo user (`[email] [password] [role]` args)     |
-| `bun run typecheck` | `tsc --noEmit`                                            |
+| `bun run typecheck` | `svelte-check --tsconfig ./tsconfig.json`                 |
 | `bun run test`      | E2E suite (`bun test --isolate`)                          |
 
 ## Features
@@ -262,20 +265,21 @@ src/
 │       ├── pages.routes.ts        # app-shell pages: /, /dashboard, /admin
 │       └── profile.routes.ts      # /profile page + /profile/avatar
 ├── client/
-│   ├── app.tsx             # Inertia client bootstrap (hydrate or render)
-│   ├── ssr.tsx             # in-process SSR renderer (react-dom/server)
+│   ├── app.ts              # Inertia client bootstrap (mount/hydrate)
+│   ├── ssr.ts              # in-process SSR renderer (svelte/server) — pre-built to dist/ssr.js
 │   ├── pages.ts            # explicit page registry (shared by SSR + bundle)
 │   ├── pages/              # Login, Register, Dashboard, ForgotPassword,
-│   │                       # ResetPassword, Admin, NotFound, Profile
-│   ├── components/         # Layout, AuthLayout, Brand, Field
-│   └── styles.css          # plain CSS, light/dark
+│   │                       # ResetPassword, Admin, NotFound, Profile (.svelte)
+│   ├── components/         # Layout, AuthLayout, Brand, Field (.svelte)
+│   └── styles.css          # global base: tokens, reset, shared UI primitives
 ├── shared/
 │   ├── types.ts            # User, Role, FlashData, SharedPageProps, Paginated
 │   └── inertia.d.ts        # InertiaConfig augmentation → typed props.auth
 ├── migrations/             # versioned SQL schema files (0001, 0002, …)
 └── tests/                  # bun:test E2E suite
 scripts/
-├── build.ts                # esbuild: bundle client → dist/assets/app-[hash].js + CSS
+├── build.ts                # esbuild: two passes — client bundle → dist/assets/app-[hash].js + CSS; SSR bundle → dist/ssr.js
+├── svelte-plugin.ts        # esbuild plugin: compile .svelte components (client + server modes)
 └── seed.ts                 # wrangler d1 execute kilat --local + hashPassword
 wrangler.toml               # Workers config: D1 binding, ASSETS binding, nodejs_compat, env vars
 dist/                       # build output (gitignored), served by Workers Static Assets
@@ -301,8 +305,10 @@ dist/                       # build output (gitignored), served by Workers Stati
   `409 + X-Inertia-Location` on asset-version mismatch; partial reloads via
   `X-Inertia-Partial-*`; one-shot flash and shared props merged per page.
 - **SSR + hydration**: `renderPage()` renders with
-  `createInertiaApp({ page, render: renderToString })`; the client hydrates
-  when `data-server-rendered` is present. Same page registry on both sides.
+  `createInertiaApp({ page, setup })` using `mount` or `hydrate` from
+  `svelte`; SSR uses `render` from `svelte/server`. The SSR bundle is
+  pre-built to `dist/ssr.js` because Wrangler's internal esbuild cannot
+  compile `.svelte` files. Same page registry on both sides.
 - **Asset versioning**: esbuild emits content-hashed files; the hash is
   the Inertia `version`. Stale clients get a 409 and reload. Run
   `bun run build` before `wrangler dev` or `wrangler deploy` when assets
@@ -392,9 +398,10 @@ read-only copies to the nearest edge automatically.
 Kilat ships **six template variants** — pick one via the scaffolder:
 
 - **Vanilla CSS** (`default`, `svelte-vanilla`, `vue-vanilla`): design tokens
-  via CSS variables, light/dark via `[data-theme]`, co-located `<style>` or
-  scoped CSS. Zero-dependency, zero extra build steps — the CSS is bundled
-  and content-hashed by the same esbuild pipeline as the JS.
+  via CSS variables, light/dark via `[data-theme]`, scoped CSS in `.svelte`
+  SFCs. Zero-dependency, zero extra build steps — the Svelte compiler
+  handles scoped `<style>` blocks; esbuild bundles `styles.css` and any
+  standalone `.css` imports.
 - **Tailwind CSS v4** (`react-tailwind`, `svelte-tailwind`, `vue-tailwind`):
   utility classes, `@theme inline` bridging CSS vars to Tailwind tokens so
   dark mode auto-switches at runtime. Tailwind v4 CLI runs as a pre-build
@@ -417,6 +424,14 @@ Kilat ships **six template variants** — pick one via the scaffolder:
   Objects for real per-IP limiting when you need it.
 - **CSP uses `script-src 'unsafe-inline'`** because Inertia embeds the page
   payload as inline JSON; external script injection is still blocked.
+- **SSR pre-build**: Wrangler's internal esbuild cannot compile `.svelte`
+  files, so SSR is pre-built to `dist/ssr.js` by a second esbuild pass in
+  `scripts/build.ts` (with `sveltePlugin("server")`). `inertia.ts` imports
+  `renderPage` from `../../dist/ssr.js`.
+- **`@inertiajs/svelte` export condition**: `@inertiajs/svelte` only
+  exports under the `svelte` condition. Bun.build can resolve this via
+  `conditions: ['svelte']`, but the Bun runtime cannot — another reason the
+  SSR bundle is pre-built.
 - **`import.meta.glob` was removed from Bun 1.3** — the page registry uses
   explicit imports.
 - **Run `bun run build` before `wrangler dev`** if assets have changed —

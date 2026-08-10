@@ -19,16 +19,18 @@ contributions broke the architecture by inventing their own layout.
 - **D1** (SQLite at the edge) — async, zero-ORM. Accessed via `env.DB`
   binding (`prepare().bind().first/all/run`). Schema lives in `migrations/`
   (versioned SQL applied via `wrangler d1 migrations apply`).
-- **Inertia v3 + React 19** — in-process SSR; page registry in
-  `src/client/pages.ts` with explicit imports. `renderToString` from
-  `react-dom/server` runs inside the Workers bundle.
-- **esbuild** — client asset bundler (`scripts/build.ts`). Emits
-  content-hashed JS + CSS to `dist/`, served via Workers Static Assets
-  binding (`env.ASSETS`).
-- **Vanilla CSS, co-located** — no CSS framework. `styles.css` holds only
-  global base (tokens, reset, shared UI primitives); component and page
-  styles live in sibling `.css` files imported by each `.tsx` (see "CSS"
-  below).
+- **Inertia v3 + Svelte 5** — in-process SSR; page registry in
+  `src/client/pages.ts` with explicit imports. SSR via `render` from
+  `svelte/server` — pre-built to `dist/ssr.js` because Wrangler's internal
+  esbuild cannot compile `.svelte` files.
+- **esbuild** — client asset bundler (`scripts/build.ts`). Two esbuild
+  passes: client (with `sveltePlugin("client")`) and SSR (with
+  `sveltePlugin("server")` → `dist/ssr.js`). Emits content-hashed JS + CSS
+  to `dist/`, served via Workers Static Assets binding (`env.ASSETS`).
+- **Scoped `<style>` in `.svelte` SFCs** — no CSS framework. `styles.css`
+  holds only global base (tokens, reset, shared UI primitives); component
+  and page styles live in scoped `<style>` blocks inside each `.svelte`
+  file (see "CSS" below).
 
 ## Layout
 
@@ -54,15 +56,29 @@ src/
 │       ├── google-oauth.routes.ts # /auth/google, /auth/google/callback
 │       ├── pages.routes.ts        # app-shell pages: /, /dashboard, /admin
 │       └── profile.routes.ts      # /profile page + /profile/avatar
-├── client/                 # React + Inertia (pages/, components/, styles.css = global base only)
+├── client/                 # Svelte + Inertia (pages/, components/, styles.css = global base only)
 ├── shared/                 # types.ts, inertia.d.ts (client+server shared)
 ├── migrations/             # versioned SQL schema files (0001, 0002, …)
 └── tests/                  # bun:test E2E suite
 scripts/
-├── build.ts                # esbuild: bundle client → dist/assets/app-[hash].js + CSS + manifest.json
+├── build.ts                # esbuild: two passes — client bundle → dist/assets/app-[hash].js + CSS + manifest.json; SSR bundle → dist/ssr.js
+├── svelte-plugin.ts        # esbuild plugin: compile .svelte components (client + server modes)
 └── seed.ts                 # wrangler d1 execute kilat --local + hashPassword
 wrangler.toml               # Workers config: D1 binding, ASSETS binding, nodejs_compat, env vars
 dist/                       # build output (gitignored), served by Workers Static Assets
+```
+
+### `src/client/`
+
+```
+src/client/
+├── app.ts              # Inertia client bootstrap (mount/hydrate)
+├── ssr.ts              # in-process SSR renderer (svelte/server) — pre-built to dist/ssr.js
+├── pages.ts            # explicit page registry (shared by SSR + bundle)
+├── pages/              # Login, Register, Dashboard, ForgotPassword,
+│                       # ResetPassword, Admin, NotFound, Profile (.svelte)
+├── components/         # Layout, AuthLayout, Brand, Field (.svelte)
+└── styles.css          # global base: tokens, reset, shared UI primitives
 ```
 
 ## Hard rules
@@ -99,22 +115,22 @@ dist/                       # build output (gitignored), served by Workers Stati
 
 6. **TypeScript**: `strict` + `noUncheckedIndexedAccess` +
    `verbatimModuleSyntax` are on. Type-only imports MUST use `import type`.
-   No ORM, no loose `any`; queries are parameterized.
+   No ORM, no loose `any`; queries are parameterized. `bun run typecheck`
+   runs `svelte-check --tsconfig ./tsconfig.json`.
 
-7. **CSS is co-located, not centralised.** `styles.css` holds only global
+7. **CSS is scoped, not centralised.** `styles.css` holds only global
    base: design tokens (`:root`, `[data-theme]`), reset (`*`, `body`, `h1`…),
    `:focus-visible`, and shared UI primitives used across multiple pages
    (`.btn`, `.badge`, `.panel`, `.table`, `.avatar`). Everything else lives
-   in a sibling `.css` file imported by the component or page that uses it
-   (`Brand.css`, `Layout.css`, `Dashboard.css`, …). Never add page-specific
-   or component-specific rules to `styles.css` — it stays small and global.
-   esbuild bundles all imported `.css` files into one stylesheet via the
-   import graph (`app.tsx` → `pages.ts` → page → component → `.css`).
+   in scoped `<style>` blocks inside each `.svelte` SFC. Never add
+   page-specific or component-specific rules to `styles.css`. The Svelte
+   compiler handles scoped `<style>` blocks; esbuild's `.css` loader bundles
+   `styles.css` and any standalone `.css` imports.
 
 8. **UI work follows the design system — never invents a parallel one.**
    Reuse tokens from `styles.css` and existing components; don't reach for
    AI-default aesthetics (beige, ghost cards, purple gradients, italic
-   serif accents). New components add co-located styles per rule 7.
+   serif accents). New components add scoped `<style>` blocks per rule 7.
 
 ## Route conventions
 
@@ -163,6 +179,14 @@ dist/                       # build output (gitignored), served by Workers Stati
   not a custom handler. `run_worker_first = ["/*", "!/assets/*"]` in
   `wrangler.toml` means all requests hit the Worker first except `/assets/*`
   which bypass to the static asset binding directly.
+- **SSR bundle is pre-built.** Wrangler's internal esbuild cannot compile
+  `.svelte` files or resolve the `svelte` export condition.
+  `scripts/build.ts` does a second esbuild pass (with `sveltePlugin("server")`)
+  to produce `dist/ssr.js` — plain JS that Wrangler can bundle. `inertia.ts`
+  imports `renderPage` from `../../dist/ssr.js`.
+- **`@inertiajs/svelte` only exports under the `svelte` condition.** Bun.build
+  can resolve this via `conditions: ['svelte']`, but the Bun runtime cannot.
+  This is why the SSR bundle is pre-built.
 
 ## Testing
 
@@ -172,7 +196,9 @@ dist/                       # build output (gitignored), served by Workers Stati
   isolated. Without `--isolate`, one file's teardown finalizes the next
   file's cached values.
 - Suite must stay green: run `bun run typecheck` and
-  `bun run test` before finishing. `tsc` only covers `src/` and `scripts/`.
+  `bun run test` before finishing. `bun run typecheck` runs
+  `svelte-check --tsconfig ./tsconfig.json`; `tsc` is not used for
+  typechecking in the Svelte variant.
 - Tests use `bun:test` against the Hono app directly (not the Workers
   runtime). D1 calls need mocking or a local D1 instance via Miniflare.
 
@@ -180,7 +206,7 @@ dist/                       # build output (gitignored), served by Workers Stati
 
 - When testing in the browser, ALWAYS open the browser console (DevTools →
   Console) and check for errors/warnings. Client-side runtime errors
-  (failed imports, React runtime errors, hydration mismatches, bad Inertia
+  (failed imports, Svelte runtime errors, hydration mismatches, bad Inertia
   props, network 4xx/5xx on XHR) do NOT show up in `bun run typecheck` or
   the build — the build compiles, the page renders, and the bug is silent
   until you read the console. A green build + green tests does NOT mean the
