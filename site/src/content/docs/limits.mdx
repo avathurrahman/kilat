@@ -103,6 +103,10 @@ The simplest upgrade if you want to stay on the edge:
 cpu_ms = 300_000
 ```
 
+Don't want to deal with Wrangler? See
+[AI agent deployment](/deployment/ai-agent/) for copy-paste prompts that
+handle the upgrade for you.
+
 :::tip[Need even higher limits?]
 Cloudflare offers a [Limit Increase Request Form](https://forms.gle/eX6pXvit1wBv77Yw5)
 for accounts that need adjustments beyond the Paid plan defaults.
@@ -133,15 +137,10 @@ Dulak gives you full control: deploy via Docker on any VPS, no vendor
 lock-in, no platform quotas. The trade-off is you manage your own server
 (or container) instead of letting Cloudflare handle distribution.
 
-Scaffold a Dulak project the same way:
-
-```sh
-bun create dulak@latest my-app
-cd my-app
-bun run dev          # http://localhost:4000
-
-For a step-by-step migration guide, see
-[Migrating from Kilat to Dulak](/blog/migrating-to-dulak/).
+Ready to move? The
+[Migrating from Kilat to Dulak](/blog/migrating-to-dulak/) guide walks
+through every step — and includes a copy-paste prompt you can give your
+AI agent to automate the whole migration.
 
 ## Sources
 
