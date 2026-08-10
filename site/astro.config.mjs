@@ -90,6 +90,7 @@ export default defineConfig({
             { label: "Local development", slug: "database/local-development" },
           ],
         },
+        { label: "Limits", slug: "limits" },
         { label: "Testing", slug: "testing" },
         {
           label: "Extending",
