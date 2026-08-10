@@ -28,7 +28,7 @@ const res = await fetch("https://oauth2.googleapis.com/token", {
     code,
     client_id: config.google.clientId!,
     client_secret: config.google.clientSecret!,
-    redirect_uri: `${config.appUrl}/auth/google/callback`,
+    redirect_uri: `${new URL(c.req.url).origin}/auth/google/callback`,
     grant_type: "authorization_code",
   }),
 });
@@ -73,10 +73,6 @@ GOOGLE_CLIENT_ID=your-client-id
 GOOGLE_CLIENT_SECRET=your-client-secret
 ```
 
-### 3. Set APP_URL
-
-`config.appUrl` builds the redirect URI. Ensure `APP_URL` in `wrangler.toml`
-`[vars]` matches your deployed domain exactly (including `https://`).
 
 ## Auto-disable when unconfigured
 

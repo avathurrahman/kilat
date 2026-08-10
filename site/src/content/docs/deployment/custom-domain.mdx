@@ -29,16 +29,6 @@ That's it. Traffic to `kilat.example.com` now routes to your Worker at the edge.
 Custom Domains are simplest for a full app — one domain, automatic TLS, no
 wildcard patterns.
 
-## Update APP_URL
-
-After adding the domain, update `APP_URL` in `wrangler.toml` `[vars]` to the
-new URL — it drives email reset links and the Google OAuth redirect URI:
-
-```toml
-[vars]
-APP_URL = "https://kilat.example.com"
-```
-
 ## Update the Google OAuth redirect URI
 
 If you use Google OAuth, add the new callback URL in the Google Cloud Console:
@@ -56,6 +46,6 @@ bun run build
 wrangler deploy
 ```
 
-The `APP_URL` change takes effect on the next deploy. The Custom Domain itself
-is active as soon as Cloudflare provisions the certificate — no re-deploy
-needed for the routing, but the env var change does require a deploy.
+The Custom Domain is active as soon as Cloudflare provisions the certificate.
+Email reset links and OAuth redirect URIs are derived from the request origin,
+so no env var change is needed — just re-deploy to pick up the new domain.
