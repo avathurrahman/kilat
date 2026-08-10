@@ -6,7 +6,7 @@ const faqs: { q: string; a: string }[] = [
     },
     {
         q: "How is Kilat different from Dulak?",
-        a: "Dulak runs on Bun (Bun.serve + bun:sqlite + Bun.build). Kilat runs on Cloudflare Workers (Wrangler + D1 + esbuild). Same philosophy, same structure, same Inertia v3 SSR pattern — different runtime. Dulak is for self-hosting on a VPS; Kilat is for zero-ops edge deployment. The dual esbuild build pattern (pre-build SSR to dist/ssr.js) is Kilat's key innovation — Wrangler's internal esbuild can't compile .svelte or .vue files, so we pre-build SSR to plain JS.",
+        a: "Same stack, different runtime. Kilat runs on Cloudflare Workers — zero ops, 300+ edge locations, free to start. Dulak runs on Bun — self-hosted, no platform limits, unlimited everything. Outgrew Kilat's free tier? Migrate to Dulak with a single AI agent prompt.",
     },
     {
         q: "Why Cloudflare Workers and not Bun?",
