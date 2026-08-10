@@ -1,219 +1,50 @@
 ---
 title: AI agent deployment
-description: Copy-paste command reference for AI agents deploying Kilat — no syntax to memorize.
+description: Copy-paste this prompt to your AI agent — it will deploy Kilat for you.
 ---
 
-Deploying Kilat involves three platforms: **Cloudflare Workers** (app),
-**D1** (database), and **Cloudflare Pages** (docs site). This page is a
-copy-paste reference — every command an AI agent needs, in execution order.
+Don't want to memorize Wrangler commands? Copy-paste the prompt below into
+your AI agent (Cursor, Claude, etc.) and it will handle everything.
 
-## Prerequisites
+## First deploy
 
-```sh
-# Install Wrangler globally if not already installed
-bun add -g wrangler
+```
+Deploy my Kilat app to Cloudflare Workers.
 
-# Authenticate with Cloudflare
-wrangler login
-
-# Verify you're in the project root (has wrangler.toml)
-cat wrangler.toml
+Steps:
+1. Run `bun run build` to build client assets
+2. Run `wrangler d1 migrations apply kilat --remote` to apply database migrations
+3. Run `wrangler deploy` to deploy the Worker
+4. Curl the health endpoint to verify it's live
+5. Tell me the production URL
 ```
 
-## First-time setup
+## Set secrets
 
-### 1. Create D1 database
+```
+Set these production secrets for my Kilat app on Cloudflare Workers:
+- NODE_ENV = production
+- RESEND_API_KEY (I'll provide the value)
+- GOOGLE_CLIENT_ID (I'll provide the value)
+- GOOGLE_CLIENT_SECRET (I'll provide the value)
 
-```sh
-wrangler d1 create kilat
+Use `wrangler secret put` for each. Ask me for the values before running the commands.
 ```
 
-Copy the `database_id` from the output into `wrangler.toml`:
+## Update an existing deployment
 
-```toml
-[[d1_databases]]
-binding = "DB"
-database_id = "PASTE_ID_HERE"
-database_name = "kilat"
-migrations_dir = "migrations"
 ```
-
-### 2. Apply migrations
-
-```sh
-# Local dev database
-wrangler d1 migrations apply kilat --local
-
-# Production database (run once before first deploy)
-wrangler d1 migrations apply kilat --remote
+Deploy the latest code to my Kilat app on Cloudflare Workers.
+Build, apply any new migrations, then deploy. Verify it's live after.
 ```
-
-### 3. Set production secrets
-
-```sh
-wrangler secret put NODE_ENV
-# Type: production
-
-wrangler secret put RESEND_API_KEY
-# Type: your resend key (only if MAIL_DRIVER=resend)
-
-wrangler secret put GOOGLE_CLIENT_ID
-# Type: your Google OAuth client ID
-
-wrangler secret put GOOGLE_CLIENT_SECRET
-# Type: your Google OAuth client secret
-
-wrangler secret put MAILTRAP_API_TOKEN
-# Type: your Mailtrap token (only if MAIL_DRIVER=mailtrap)
-```
-
-For local dev, put secrets in `.dev.vars` (gitignored):
-
-```sh
-cat > .dev.vars << 'EOF'
-RESEND_API_KEY=re_xxxxx
-GOOGLE_CLIENT_ID=xxxxx
-GOOGLE_CLIENT_SECRET=xxxxx
-EOF
-```
-
-### 4. Seed the database (optional)
-
-```sh
-# Local
-bun run db:seed admin@example.com password admin
-
-# Remote (production) — creates admin user directly
-wrangler d1 execute kilat --remote --command "INSERT INTO users (name, email, password_hash, role) VALUES ('Admin', 'admin@example.com', 'HASH_HERE', 'admin')"
-```
-
-## Deploy the app
-
-```sh
-# 1. Build client assets (esbuild → dist/)
-bun run build
-
-# 2. Apply any new migrations to production
-wrangler d1 migrations apply kilat --remote
-
-# 3. Deploy the Worker
-wrangler deploy
-```
-
-Wrangler handles atomic swaps — in-flight requests finish on the old
-version, new requests hit the new one.
-
-## Deploy the docs site
-
-The docs site lives in `site/` and deploys to Cloudflare Pages separately.
-
-```sh
-cd site
-
-# Build the Astro site
-bun run build
-
-# Deploy to production (hardcoded --branch kilatjs)
-bun run deploy
-```
-
-Production URL: `https://kilatjs.pages.dev`
 
 ## Download production data to local
 
-```sh
-# Export remote D1 to SQL file
-wrangler d1 execute kilat --remote --export ./backup.sql
-
-# Import into local D1
-wrangler d1 execute kilat --local --file ./backup.sql
+```
+Export my production D1 database to a local SQL file and import it into my local D1.
+Use `wrangler d1 execute kilat --remote --export ./backup.sql` then
+`wrangler d1 execute kilat --local --file ./backup.sql`.
 ```
 
-## Inspect production database
-
-```sh
-# List all tables
-wrangler d1 execute kilat --remote --command "SELECT name FROM sqlite_master WHERE type='table'"
-
-# Count users
-wrangler d1 execute kilat --remote --command "SELECT COUNT(*) as count FROM users"
-
-# List recent users
-wrangler d1 execute kilat --remote --command "SELECT id, name, email, role, created_at FROM users ORDER BY created_at DESC LIMIT 10"
-```
-
-## Rollback
-
-Workers deployments are immutable — you cannot "rollback" to a previous
-version. Instead, re-deploy the previous code:
-
-```sh
-# Find the last known good commit
-git log --oneline -5
-
-# Checkout the previous commit and redeploy
-git checkout <good-commit-hash>
-bun run build
-wrangler deploy
-
-# Return to latest
-git checkout main
-```
-
-:::caution[Migrations are forward-only]
-Never edit an applied migration. If a migration broke production, write a
-**new** migration file that reverses the change:
-
-```sh
-cat > migrations/0005_revert_xxx.sql << 'SQL'
--- Revert the problematic change
-ALTER TABLE users DROP COLUMN bad_column;
-SQL
-wrangler d1 migrations apply kilat --remote
-```
-
-:::
-
-## Verify deployment
-
-```sh
-# Check the Worker is live
-curl -s https://your-app.workers.dev/health
-# Expected: {"status":"ok"}
-
-# Check SSR is working
-curl -s https://your-app.workers.dev/login | grep 'data-server-rendered'
-# Expected: data-server-rendered="true"
-
-# Check D1 connectivity
-wrangler d1 execute kilat --remote --command "SELECT 1 AS n"
-# Expected: [{"n": 1}]
-```
-
-## Common errors
-
-| Error | Cause | Fix |
-| --- | --- | --- |
-| `database_id` not found | D1 database not created or ID wrong in `wrangler.toml` | Run `wrangler d1 create kilat`, paste ID into `wrangler.toml` |
-| `Error 1102` | Worker exceeded CPU time limit (10 ms free / 30 s paid) | Upgrade to Workers Paid, or raise `cpu_ms` in `wrangler.toml` |
-| `Error 1027` | Exceeded 100K daily requests (free plan) | Upgrade to Workers Paid |
-| `NotSupportedError` PBKDF2 | Iterations above 100K on Workers | Use 100K — Workers caps PBKDF2 at 100K |
-| `Cannot find module '../client/ssr'` | Client assets not built | Run `bun run build` before `wrangler deploy` |
-| `wrangler deploy` uploads stale assets | `dist/` is cached | `rm -rf dist && bun run build` |
-
-## Quick reference card
-
-| Task | Command |
-| --- | --- |
-| Build | `bun run build` |
-| Deploy app | `wrangler deploy` |
-| Deploy docs | `cd site && bun run deploy` |
-| Migrate (local) | `wrangler d1 migrations apply kilat --local` |
-| Migrate (remote) | `wrangler d1 migrations apply kilat --remote` |
-| Set secret | `wrangler secret put SECRET_NAME` |
-| Export DB | `wrangler d1 execute kilat --remote --export ./backup.sql` |
-| Import DB | `wrangler d1 execute kilat --local --file ./backup.sql` |
-| Query remote | `wrangler d1 execute kilat --remote --command "SQL_HERE"` |
-| Health check | `curl -s https://your-app.workers.dev/health` |
-| Typecheck | `bun run typecheck` |
-| Test | `bun test --isolate` |
+That's it. Your AI agent reads these prompts, runs the commands, and tells
+you the result. You never touch Wrangler directly.
