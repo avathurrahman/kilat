@@ -71,6 +71,7 @@ const ALL_TEMPLATES = FRAMEWORKS.flatMap((fw) =>
 const CLEANUP = [
   ".playwright-mcp",
   "create-kilat",
+  "site",
   ".env",
   ".env.example",
   "*.png",
@@ -139,12 +140,6 @@ async function patchWrangler(targetDir, projectName) {
   content = content.replace(
     /^database_id = ".*"/m,
     'database_id = "YOUR_D1_DATABASE_ID"',
-  );
-
-  // Reset APP_URL to match the new Worker name.
-  content = content.replace(
-    /^APP_URL = ".*"/m,
-    `APP_URL = "https://${projectName}.<your-subdomain>.workers.dev"`,
   );
 
   await writeFile(wranglerPath, content);

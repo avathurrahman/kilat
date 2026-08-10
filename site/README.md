@@ -20,7 +20,7 @@ npm run build      # static output → site/dist
 ## Deploy (Cloudflare Pages)
 
 - **Dashboard**: root directory `site`, build `npm run build`, output `dist`.
-- **CLI**: `npx wrangler pages deploy dist --project-name kilat-site`
+- **CLI**: `npx wrangler pages deploy dist --project-name kilatjs`
   (`site/wrangler.toml` pins the config).
 
 Set the production domain in `astro.config.mjs` (`site`) before going live.

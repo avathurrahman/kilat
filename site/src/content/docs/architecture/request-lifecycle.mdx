@@ -63,8 +63,9 @@ subsequent log line can reference the ID.
 ### 3. `checkOrigin` — CSRF
 
 `src/server/security.ts` checks the `Origin` header on state-changing requests
-(POST, PUT, DELETE, PATCH). If the origin doesn't match `APP_URL`, the request
-is rejected. This is the CSRF defense — no token dance, just the Origin check.
+(POST, PUT, DELETE, PATCH). If the origin doesn't match the request host, the
+request is rejected. This is the CSRF defense — no token dance, just the Origin
+check.
 
 ### 4. `secureHeaders` — security headers
 
