@@ -13,7 +13,6 @@ export type Role = "user" | "admin";
 /** Environment variables passed from wrangler `[vars]` + secrets. */
 export interface EnvVars {
   NODE_ENV?: string;
-  APP_URL?: string;
   SSR?: string;
   MAIL_DRIVER?: string;
   MAIL_FROM?: string;
@@ -32,8 +31,6 @@ export const config = {
   /** Server-side rendering of Inertia pages. Set SSR=false to ship an empty
    *  shell and let the client render (faster boot, no react-dom/server cost). */
   ssr: true,
-  /** Absolute base URL — used for email links and OAuth redirect URIs. */
-  appUrl: "http://localhost:8787",
   mail: {
     driver: "log" as MailDriver,
     from: "no-reply@example.com",
@@ -79,7 +76,6 @@ export function initConfig(env: EnvVars): void {
 
   config.isProd = env.NODE_ENV === "production";
   config.ssr = env.SSR !== "false";
-  config.appUrl = pick(env.APP_URL, "http://localhost:8787").replace(/\/+$/, "");
   config.mail = {
     driver: mailDriver,
     from: pick(env.MAIL_FROM, "no-reply@example.com"),

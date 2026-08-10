@@ -53,8 +53,8 @@ bun create kilat@latest my-app --template svelte-vanilla
 3. Prompts for styling (vanilla CSS, Tailwind) — arrow-key selection.
 4. Downloads the selected template branch from GitHub.
 5. Strips dev-only files (screenshots, `.env`, etc.).
-6. Patches `wrangler.toml`: renames the Worker, resets the D1 `database_id`
-   and `APP_URL` so the user configures their own.
+6. Patches `wrangler.toml`: renames the Worker and resets the D1
+   `database_id` so the user configures their own.
 7. Renames `package.json` to the project name.
 8. Runs `bun install` (unless `--no-install`).
 

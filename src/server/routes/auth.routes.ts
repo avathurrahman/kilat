@@ -165,7 +165,7 @@ export const authRoutes = () => {
     const user = await findUserByEmail(body.email);
     if (user) {
       const token = await createPasswordReset(user.email);
-      const link = `${config.appUrl}/reset-password?email=${encodeURIComponent(user.email)}&token=${token}`;
+      const link = `${new URL(c.req.url).origin}/reset-password?email=${encodeURIComponent(user.email)}&token=${token}`;
       await sendMail({
         to: user.email,
         subject: "Reset your password",
