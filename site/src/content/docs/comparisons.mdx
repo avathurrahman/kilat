@@ -60,9 +60,12 @@ AI agent to automate the whole migration.
 
 ## Kilat vs Laravel
 
-Laravel is the gold standard for batteries-included PHP web apps. Kilat brings
-the same "it just works" ergonomics — auth, sessions, CSRF, migrations, mail —
-to TypeScript on the edge:
+Laravel is the gold standard for batteries-included PHP web apps. It's also
+a time capsule from 2011: install PHP, install Composer, install a web
+server, install a database server, configure PHP-FPM, tune your worker
+processes, set up Nginx, manage SSL certs, and *then* run `php artisan
+serve`. Kilat brings the same "it just works" ergonomics — auth, sessions,
+CSRF, migrations, mail — to TypeScript on the edge, minus the archaeology:
 
 | | Kilat | Laravel |
 | --- | --- | --- |
@@ -70,8 +73,17 @@ to TypeScript on the edge:
 | Runtime | Cloudflare Workers (edge) | PHP-FPM / Octane |
 | Database | D1 (SQLite at the edge) | MySQL / Postgres |
 | ORM | none — raw prepared statements | Eloquent |
-| Deploy | `wrangler deploy` | Server + web server |
+| Deploy | `wrangler deploy` | Server + web server + PHP + Composer |
 | Latency | 300+ edge locations | Single region |
+| Setup | `bun create kilat` → running | Install PHP, Composer, web server, DB |
+| Cold start | Sub-millisecond | ~250 ms (PHP-FPM worker spin-up) |
+| Monthly cost (paid) | $5 (Workers Paid) | VPS ($5–20) + DB ($0–30) |
+| Things to install | Bun (1 thing) | PHP + Composer + web server + DB server |
+
+Laravel gives you more batteries — queues, jobs, broadcasting, Eloquent
+relationships, Blade components, a massive ecosystem. Kilat gives you fewer,
+but what's there runs at the edge with zero ops. You can learn Laravel's
+conventions, or you can read Kilat end to end in an afternoon.
 
 ## Why no ORM
 
