@@ -13,13 +13,27 @@ import { render } from "svelte/server";
 import type { Page } from "@inertiajs/core";
 import { notFoundPage, pages } from "./pages";
 
-const renderFn = await createInertiaApp({
-	resolve: (name: string) => pages[`./pages/${name}.svelte`] ?? notFoundPage,
-});
+// Lazy-init: top-level await in a pre-built ESM bundle can fail to resolve
+// in some runtimes (e.g. bun test). Initialize on first renderPage call instead.
+let renderFn: ((page: Page, render: typeof render) => Promise<{
+	body: string;
+	head: string[];
+}>) | null = null;
+
+async function ensureRenderFn() {
+	if (!renderFn) {
+		renderFn = await createInertiaApp({
+			resolve: (name: string) =>
+				pages[`./pages/${name}.svelte`] ?? notFoundPage,
+		});
+	}
+	return renderFn;
+}
 
 export async function renderPage(page: Page) {
-	if (typeof renderFn !== "function") {
+	const fn = await ensureRenderFn();
+	if (typeof fn !== "function") {
 		throw new Error("SSR render function not initialized");
 	}
-	return renderFn(page as unknown as Parameters<typeof renderFn>[0], render);
+	return fn(page as unknown as Parameters<typeof fn>[0], render);
 }
