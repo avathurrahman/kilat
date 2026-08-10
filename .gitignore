@@ -8,5 +8,8 @@ data/uploads/
 .playwright-mcp/
 *.png
 .llm-wiki/meta/
+.llm-wiki/raw/
+.llm-wiki/outputs/
+.llm-wiki/.discoveries/
 .wrangler/
 create-kilat/bun.lock
