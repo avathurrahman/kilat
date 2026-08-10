@@ -21,7 +21,7 @@ code you own**, not a framework you depend on.
 | Rendering | Inertia v3 + in-process SSR | Framework rendering pipeline |
 | Database | D1, raw prepared statements | ORM / adapter layer |
 | Deploy | `wrangler deploy` | Platform-specific (Vercel, etc.) |
-| Lock-in | None — it's your code | Framework opinions + platform |
+| Free to start | ✅ [Yes](/limits/) — 100K req/day, 500 MB D1 | ⚠️ Vercel/Netlify free tier is 100K req/**month** |
 
 The tradeoff: meta-frameworks handle more for you, but you learn *their*
 abstractions. Kilat handles less, but what's there is plain TypeScript you can
@@ -78,6 +78,7 @@ CSRF, migrations, mail — to TypeScript on the edge, minus the archaeology:
 | Setup | `bun create kilat` → running | Install PHP, Composer, web server, DB |
 | Cold start | Sub-millisecond | ~250 ms (PHP-FPM worker spin-up) |
 | Monthly cost (paid) | $5 (Workers Paid) | VPS ($5–20) + DB ($0–30) |
+| Free to start | ✅ Yes — [100K req/day, 500 MB D1](/limits/) | ❌ No — need a server + database from day one |
 | Things to install | Bun (1 thing) | PHP + Composer + web server + DB server |
 
 Laravel gives you more batteries — queues, jobs, broadcasting, Eloquent
