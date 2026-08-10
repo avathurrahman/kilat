@@ -25,10 +25,14 @@ contributions broke the architecture by inventing their own layout.
 - **esbuild** — client asset bundler (`scripts/build.ts`). Emits
   content-hashed JS + CSS to `dist/`, served via Workers Static Assets
   binding (`env.ASSETS`).
-- **Vanilla CSS, co-located** — no CSS framework. `styles.css` holds only
-  global base (tokens, reset, shared UI primitives); component and page
-  styles live in sibling `.css` files imported by each `.tsx` (see "CSS"
-  below).
+- **Tailwind CSS v4, co-located** — Tailwind v4 CLI runs as a pre-build
+  step in `scripts/build.ts` (`bunx @tailwindcss/cli`) producing
+  `src/client/.tailwind.css` before esbuild bundles. `tailwind.css` is the
+  Tailwind entry point (`@import "tailwindcss"`, `@custom-variant dark`,
+  `@theme inline`) bridging CSS vars to Tailwind tokens so dark mode
+  auto-switches. `styles.css` still holds global base tokens; component and
+  page styles live in sibling `.css` files imported by each `.tsx` (see
+  "CSS" below).
 
 ## Layout
 
@@ -54,12 +58,12 @@ src/
 │       ├── google-oauth.routes.ts # /auth/google, /auth/google/callback
 │       ├── pages.routes.ts        # app-shell pages: /, /dashboard, /admin
 │       └── profile.routes.ts      # /profile page + /profile/avatar
-├── client/                 # React + Inertia (pages/, components/, styles.css = global base only)
+├── client/                 # React + Inertia (pages/, components/, styles.css = global base, tailwind.css = Tailwind v4 entry)
 ├── shared/                 # types.ts, inertia.d.ts (client+server shared)
 ├── migrations/             # versioned SQL schema files (0001, 0002, …)
 └── tests/                  # bun:test E2E suite
 scripts/
-├── build.ts                # esbuild: bundle client → dist/assets/app-[hash].js + CSS + manifest.json
+├── build.ts                # Tailwind CLI pre-step + esbuild: bundle client → dist/assets/app-[hash].js + CSS + manifest.json
 └── seed.ts                 # wrangler d1 execute kilat --local + hashPassword
 wrangler.toml               # Workers config: D1 binding, ASSETS binding, nodejs_compat, env vars
 dist/                       # build output (gitignored), served by Workers Static Assets
@@ -101,20 +105,25 @@ dist/                       # build output (gitignored), served by Workers Stati
    `verbatimModuleSyntax` are on. Type-only imports MUST use `import type`.
    No ORM, no loose `any`; queries are parameterized.
 
-7. **CSS is co-located, not centralised.** `styles.css` holds only global
-   base: design tokens (`:root`, `[data-theme]`), reset (`*`, `body`, `h1`…),
-   `:focus-visible`, and shared UI primitives used across multiple pages
-   (`.btn`, `.badge`, `.panel`, `.table`, `.avatar`). Everything else lives
-   in a sibling `.css` file imported by the component or page that uses it
-   (`Brand.css`, `Layout.css`, `Dashboard.css`, …). Never add page-specific
-   or component-specific rules to `styles.css` — it stays small and global.
-   esbuild bundles all imported `.css` files into one stylesheet via the
-   import graph (`app.tsx` → `pages.ts` → page → component → `.css`).
+7. **Tailwind CSS v4 is the primary styling approach, with co-located CSS
+   for component-specific styles.** `tailwind.css` is the Tailwind entry
+   point (`@import "tailwindcss"`, `@custom-variant dark`, `@theme inline`)
+   bridging CSS vars to Tailwind tokens so dark mode auto-switches at
+   runtime. `styles.css` still holds global base tokens (`:root`,
+   `[data-theme]`, reset, shared UI primitives). Co-located `.css` files
+   are still used for component-specific styles alongside Tailwind
+   utilities (`Brand.css`, `Layout.css`, `Dashboard.css`, …). Never add
+   page-specific or component-specific rules to `styles.css` — it stays
+   small and global. The generated `.tailwind.css` (from the Tailwind CLI
+   pre-build step) is imported by `app.tsx`. esbuild bundles all imported
+   `.css` files into one stylesheet via the import graph (`app.tsx` →
+   `pages.ts` → page → component → `.css`).
 
 8. **UI work follows the design system — never invents a parallel one.**
-   Reuse tokens from `styles.css` and existing components; don't reach for
-   AI-default aesthetics (beige, ghost cards, purple gradients, italic
-   serif accents). New components add co-located styles per rule 7.
+   Reuse Tailwind tokens bridged from CSS vars in `styles.css` and existing
+   components; don't reach for AI-default aesthetics (beige, ghost cards,
+   purple gradients, italic serif accents). New components add co-located
+   styles per rule 7.
 
 ## Route conventions
 
@@ -163,6 +172,10 @@ dist/                       # build output (gitignored), served by Workers Stati
   not a custom handler. `run_worker_first = ["/*", "!/assets/*"]` in
   `wrangler.toml` means all requests hit the Worker first except `/assets/*`
   which bypass to the static asset binding directly.
+- **Tailwind CLI runs as a pre-build step** (`bunx @tailwindcss/cli -i
+  src/client/tailwind.css -o src/client/.tailwind.css --minify`) producing
+  `src/client/.tailwind.css` before esbuild bundles. Run `bun run build`
+  before `wrangler dev` when styles change.
 
 ## Testing
 

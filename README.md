@@ -6,12 +6,14 @@ The Indonesian word for *lightning* — a full-stack edge starter that runs at t
 [![Cloudflare Workers](https://img.shields.io/badge/runtime-Cloudflare_Workers-F38020?logo=cloudflare&logoColor=white)](https://workers.cloudflare.com/)
 [![Hono](https://img.shields.io/badge/Hono-4.x-FF6B35?logo=hono&logoColor=white)](https://hono.dev/)
 [![D1](https://img.shields.io/badge/D1-SQLite_at_the_edge-059669)](https://developers.cloudflare.com/d1/)
+[![Tailwind CSS](https://img.shields.io/badge/Tailwind_CSS-v4-06B6D4?logo=tailwindcss&logoColor=white)](https://tailwindcss.com/)
 
 A full-stack starter running entirely on **Cloudflare Workers**: **Hono** for
 HTTP, **D1** for data, **Inertia v3** for server-driven UI with **in-process
 SSR** — React 19 `renderToString` runs inside the Worker bundle — with auth,
-roles, migrations, and zero-config deploys. No Docker, no VPS, no reverse
-proxy. `wrangler deploy` and you're live on 300+ edge locations.
+roles, migrations, and zero-config deploys. Styling uses **Tailwind CSS v4**.
+No Docker, no VPS, no reverse proxy. `wrangler deploy` and you're live on
+300+ edge locations.
 
 ```mermaid
 flowchart LR
@@ -58,8 +60,8 @@ of breaking it.
   it must be upgraded, audited, and can break under you. When 60 lines of
   our own code are enough, we write them: the rate limiter is a no-op stub
   (real limiting needs KV/DO — add when you need it), the Google OAuth
-  client is plain `fetch` (no SDK), CSS is vanilla by default, and the
-  database layer is raw D1 prepared statements — no ORM.
+  client is plain `fetch` (no SDK), and the database layer is raw D1
+  prepared statements — no ORM.
 
 - **One obvious way to do things.** Structure is standardized, on purpose:
   routes only live in `routes/<feature>.routes.ts`, all SQL lives in
@@ -127,7 +129,7 @@ bun run dev           # http://localhost:8787
 | Template            | Stack                              | Branch                    |
 | ------------------- | ---------------------------------- | ------------------------- |
 | `default`           | React 19 + vanilla CSS             | `main`                    |
-| `react-tailwind`    | React 19 + Tailwind CSS v4         | `template/react-tailwind` |
+| **`react-tailwind`**    | **React 19 + Tailwind CSS v4**         | **`template/react-tailwind`** |
 | `svelte-vanilla`    | Svelte 5 + scoped `<style>` CSS    | `template/svelte-vanilla` |
 | `svelte-tailwind`   | Svelte 5 + Tailwind CSS v4         | `template/svelte-tailwind`|
 | `vue-vanilla`       | Vue 3 + scoped `<style>` CSS       | `template/vue-vanilla`    |
@@ -170,7 +172,7 @@ bun run deploy       # https://<your-worker>.<your-subdomain>.workers.dev
 | Command             | What it does                                              |
 | ------------------- | --------------------------------------------------------- |
 | `bun run dev`       | Wrangler dev server (local D1 + Workers runtime)          |
-| `bun run build`     | esbuild client assets → `dist/` (+ `manifest.json`)       |
+| `bun run build`     | esbuild client assets + Tailwind v4 CLI → `dist/` (+ `manifest.json`)       |
 | `bun run deploy`    | `wrangler deploy` to Cloudflare Workers edge              |
 | `bun run db:migrate`     | Apply D1 migrations locally                          |
 | `bun run db:migrate:remote` | Apply D1 migrations to remote (production)        |
@@ -268,14 +270,15 @@ src/
 │   ├── pages/              # Login, Register, Dashboard, ForgotPassword,
 │   │                       # ResetPassword, Admin, NotFound, Profile
 │   ├── components/         # Layout, AuthLayout, Brand, Field
-│   └── styles.css          # plain CSS, light/dark
+│   ├── styles.css          # global base tokens, bridged to Tailwind via @theme inline
+│   └── tailwind.css        # Tailwind v4 entry: @import, @theme inline, dark variant
 ├── shared/
 │   ├── types.ts            # User, Role, FlashData, SharedPageProps, Paginated
 │   └── inertia.d.ts        # InertiaConfig augmentation → typed props.auth
 ├── migrations/             # versioned SQL schema files (0001, 0002, …)
 └── tests/                  # bun:test E2E suite
 scripts/
-├── build.ts                # esbuild: bundle client → dist/assets/app-[hash].js + CSS
+├── build.ts                # Tailwind CLI pre-step + esbuild: bundle client → dist/assets/app-[hash].js + CSS
 └── seed.ts                 # wrangler d1 execute kilat --local + hashPassword
 wrangler.toml               # Workers config: D1 binding, ASSETS binding, nodejs_compat, env vars
 dist/                       # build output (gitignored), served by Workers Static Assets
@@ -306,7 +309,8 @@ dist/                       # build output (gitignored), served by Workers Stati
 - **Asset versioning**: esbuild emits content-hashed files; the hash is
   the Inertia `version`. Stale clients get a 409 and reload. Run
   `bun run build` before `wrangler dev` or `wrangler deploy` when assets
-  change.
+  change. The Tailwind v4 CLI runs as a pre-build step, emitting
+  `src/client/.tailwind.css` before esbuild bundles the client.
 - **Static assets**: served via Workers Static Assets binding (`env.ASSETS`).
   `run_worker_first = ["/*", "!/assets/*"]` in `wrangler.toml` means
   `/assets/*` bypasses the Worker and is served directly from the static
@@ -389,7 +393,20 @@ read-only copies to the nearest edge automatically.
 
 ## Styling
 
-Kilat ships **six template variants** — pick one via the scaffolder:
+This template uses **Tailwind CSS v4** (`react-tailwind`):
+
+- `tailwind.css` is the Tailwind entry point: `@import "tailwindcss"`,
+  `@custom-variant dark`, and `@theme inline` bridging CSS vars to
+  Tailwind tokens so dark mode auto-switches at runtime.
+- `styles.css` still holds global base tokens (CSS variables, reset,
+  shared UI primitives); co-located `.css` files are used for
+  component-specific styles alongside Tailwind utilities.
+- The Tailwind v4 CLI runs as a pre-build step in `scripts/build.ts`
+  (`bunx @tailwindcss/cli`), producing `src/client/.tailwind.css` before
+  esbuild bundles the client.
+
+Kilat ships **six template variants** in total — pick one via the
+scaffolder:
 
 - **Vanilla CSS** (`default`, `svelte-vanilla`, `vue-vanilla`): design tokens
   via CSS variables, light/dark via `[data-theme]`, co-located `<style>` or
@@ -421,3 +438,6 @@ Kilat ships **six template variants** — pick one via the scaffolder:
   explicit imports.
 - **Run `bun run build` before `wrangler dev`** if assets have changed —
   the Worker imports `dist/manifest.json` at module load.
+- **Tailwind v4 CLI runs as a pre-build step** (`bunx @tailwindcss/cli`)
+  producing `src/client/.tailwind.css` before esbuild bundles — run
+  `bun run build` when styles change.
