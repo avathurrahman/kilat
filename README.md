@@ -5,13 +5,15 @@ The Indonesian word for *lightning* — a full-stack edge starter that runs at t
 [![License: MIT](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE)
 [![Cloudflare Workers](https://img.shields.io/badge/runtime-Cloudflare_Workers-F38020?logo=cloudflare&logoColor=white)](https://workers.cloudflare.com/)
 [![Hono](https://img.shields.io/badge/Hono-4.x-FF6B35?logo=hono&logoColor=white)](https://hono.dev/)
+[![Vue](https://img.shields.io/badge/Vue-3-42B883?logo=vuedotjs&logoColor=white)](https://vuejs.org/)
 [![D1](https://img.shields.io/badge/D1-SQLite_at_the_edge-059669)](https://developers.cloudflare.com/d1/)
 
 A full-stack starter running entirely on **Cloudflare Workers**: **Hono** for
 HTTP, **D1** for data, **Inertia v3** for server-driven UI with **in-process
-SSR** — React 19 `renderToString` runs inside the Worker bundle — with auth,
-roles, migrations, and zero-config deploys. No Docker, no VPS, no reverse
-proxy. `wrangler deploy` and you're live on 300+ edge locations.
+SSR** — Vue 3 `renderToString` from `@vue/server-renderer` runs inside the
+Worker bundle, pre-built to `dist/ssr.js` — with auth, roles, migrations, and
+zero-config deploys. No Docker, no VPS, no reverse proxy. `wrangler deploy`
+and you're live on 300+ edge locations.
 
 ```mermaid
 flowchart LR
@@ -20,10 +22,10 @@ flowchart LR
     Worker -->|initConfig, initDb| Config
     Worker -->|session, flash| Auth
     Worker -->|page payloads| InertiaAdapter
-    InertiaAdapter -->|renderToString| ReactSSR
+    InertiaAdapter -->|renderToString| VueSSR
     Worker -->|SQL| D1[(D1)]
   end
-  ReactSSR --> Browser
+  VueSSR --> Browser
   Google -->|OAuth callback| Worker
   Mail -->|reset emails| Worker
   subgraph Static Assets
@@ -130,7 +132,7 @@ bun run dev           # http://localhost:8787
 | `react-tailwind`    | React 19 + Tailwind CSS v4         | `template/react-tailwind` |
 | `svelte-vanilla`    | Svelte 5 + scoped `<style>` CSS    | `template/svelte-vanilla` |
 | `svelte-tailwind`   | Svelte 5 + Tailwind CSS v4         | `template/svelte-tailwind`|
-| `vue-vanilla`       | Vue 3 + scoped `<style>` CSS       | `template/vue-vanilla`    |
+| **`vue-vanilla`**   | **Vue 3 + scoped `<style>` CSS**   | `template/vue-vanilla`    |
 | `vue-tailwind`      | Vue 3 + Tailwind CSS v4            | `template/vue-tailwind`   |
 
 ### Manual clone
@@ -170,12 +172,12 @@ bun run deploy       # https://<your-worker>.<your-subdomain>.workers.dev
 | Command             | What it does                                              |
 | ------------------- | --------------------------------------------------------- |
 | `bun run dev`       | Wrangler dev server (local D1 + Workers runtime)          |
-| `bun run build`     | esbuild client assets → `dist/` (+ `manifest.json`)       |
+| `bun run build`     | Two esbuild passes (client + SSR) → `dist/` (+ `manifest.json`, `dist/ssr.js`) |
 | `bun run deploy`    | `wrangler deploy` to Cloudflare Workers edge              |
 | `bun run db:migrate`     | Apply D1 migrations locally                          |
 | `bun run db:migrate:remote` | Apply D1 migrations to remote (production)        |
 | `bun run db:seed`   | Create a demo user (`[email] [password] [role]` args)     |
-| `bun run typecheck` | `tsc --noEmit`                                            |
+| `bun run typecheck` | `vue-tsc --noEmit`                                        |
 | `bun run test`      | E2E suite (`bun test --isolate`)                          |
 
 ## Features
@@ -262,20 +264,21 @@ src/
 │       ├── pages.routes.ts        # app-shell pages: /, /dashboard, /admin
 │       └── profile.routes.ts      # /profile page + /profile/avatar
 ├── client/
-│   ├── app.tsx             # Inertia client bootstrap (hydrate or render)
-│   ├── ssr.tsx             # in-process SSR renderer (react-dom/server)
+│   ├── app.ts              # Inertia client bootstrap (createApp/createSSRApp)
+│   ├── ssr.ts              # in-process SSR renderer (@vue/server-renderer) — pre-built to dist/ssr.js
 │   ├── pages.ts            # explicit page registry (shared by SSR + bundle)
 │   ├── pages/              # Login, Register, Dashboard, ForgotPassword,
-│   │                       # ResetPassword, Admin, NotFound, Profile
-│   ├── components/         # Layout, AuthLayout, Brand, Field
-│   └── styles.css          # plain CSS, light/dark
+│   │                       # ResetPassword, Admin, NotFound, Profile (.vue)
+│   ├── components/         # Layout, AuthLayout, Brand, Field (.vue)
+│   └── styles.css          # global base: tokens, reset, shared UI primitives
 ├── shared/
 │   ├── types.ts            # User, Role, FlashData, SharedPageProps, Paginated
 │   └── inertia.d.ts        # InertiaConfig augmentation → typed props.auth
 ├── migrations/             # versioned SQL schema files (0001, 0002, …)
 └── tests/                  # bun:test E2E suite
 scripts/
-├── build.ts                # esbuild: bundle client → dist/assets/app-[hash].js + CSS
+├── build.ts                # esbuild: two passes (client + SSR) → dist/assets/app-[hash].js + CSS + dist/ssr.js
+├── vue-plugin.ts           # esbuild plugin: compile .vue SFCs with @vue/compiler-sfc (client + SSR)
 └── seed.ts                 # wrangler d1 execute kilat --local + hashPassword
 wrangler.toml               # Workers config: D1 binding, ASSETS binding, nodejs_compat, env vars
 dist/                       # build output (gitignored), served by Workers Static Assets
@@ -300,9 +303,13 @@ dist/                       # build output (gitignored), served by Workers Stati
   `data-page` JSON for browser visits; JSON page payloads for XHR;
   `409 + X-Inertia-Location` on asset-version mismatch; partial reloads via
   `X-Inertia-Partial-*`; one-shot flash and shared props merged per page.
-- **SSR + hydration**: `renderPage()` renders with
-  `createInertiaApp({ page, render: renderToString })`; the client hydrates
-  when `data-server-rendered` is present. Same page registry on both sides.
+- **SSR + hydration**: `createInertiaApp` with a `setup` that uses
+  `createSSRApp` (hydrate when `data-server-rendered` is present) or
+  `createApp` (client mount). SSR uses `renderToString` from
+  `@vue/server-renderer`. The SSR bundle is pre-built to `dist/ssr.js`
+  because Wrangler's internal esbuild cannot compile `.vue` SFCs; `inertia.ts`
+  imports `renderPage` from `../../dist/ssr.js`. Same page registry on both
+  sides.
 - **Asset versioning**: esbuild emits content-hashed files; the hash is
   the Inertia `version`. Stale clients get a 409 and reload. Run
   `bun run build` before `wrangler dev` or `wrangler deploy` when assets
@@ -392,9 +399,10 @@ read-only copies to the nearest edge automatically.
 Kilat ships **six template variants** — pick one via the scaffolder:
 
 - **Vanilla CSS** (`default`, `svelte-vanilla`, `vue-vanilla`): design tokens
-  via CSS variables, light/dark via `[data-theme]`, co-located `<style>` or
-  scoped CSS. Zero-dependency, zero extra build steps — the CSS is bundled
-  and content-hashed by the same esbuild pipeline as the JS.
+  via CSS variables, light/dark via `[data-theme]`, scoped CSS in `.vue`
+  SFCs. Zero-dependency, zero extra build steps — the Vue SFC compiler
+  handles scoped `<style>` blocks; esbuild bundles `styles.css` and any
+  standalone `.css` imports.
 - **Tailwind CSS v4** (`react-tailwind`, `svelte-tailwind`, `vue-tailwind`):
   utility classes, `@theme inline` bridging CSS vars to Tailwind tokens so
   dark mode auto-switches at runtime. Tailwind v4 CLI runs as a pre-build
@@ -417,6 +425,13 @@ Kilat ships **six template variants** — pick one via the scaffolder:
   Objects for real per-IP limiting when you need it.
 - **CSP uses `script-src 'unsafe-inline'`** because Inertia embeds the page
   payload as inline JSON; external script injection is still blocked.
+- **SSR pre-build**: Wrangler's internal esbuild cannot compile `.vue` SFCs,
+  so the SSR bundle is pre-built to `dist/ssr.js` by a second esbuild pass
+  in `scripts/build.ts` (with `vuePlugin({ ssr: true })`). `inertia.ts`
+  imports `renderPage` from `../../dist/ssr.js`.
+- **Vue SFC compilation**: `@vue/compiler-sfc` compiles `.vue` SFCs via the
+  `vuePlugin` in `scripts/vue-plugin.ts`. Render functions are isomorphic,
+  so one plugin serves both client and SSR builds.
 - **`import.meta.glob` was removed from Bun 1.3** — the page registry uses
   explicit imports.
 - **Run `bun run build` before `wrangler dev`** if assets have changed —
