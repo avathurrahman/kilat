@@ -81,6 +81,7 @@ export default defineConfig({
             { label: "Overview", slug: "deployment" },
             { label: "Configuration", slug: "deployment/configuration" },
             { label: "Custom domain", slug: "deployment/custom-domain" },
+            { label: "AI agent deployment", slug: "deployment/ai-agent" },
           ],
         },
         {
