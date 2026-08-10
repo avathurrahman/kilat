@@ -17,10 +17,6 @@ const faqs: { q: string; a: string }[] = [
         a: "ORMs were built to help humans avoid writing SQL. In 2026, AI generates correct, optimized raw SQL on demand — the human-friction problem ORMs solved is gone. What remains is the cost: an ORM is a dependency you upgrade, audit, and debug, and it adds a layer between you and the database that hides the actual query plan. D1 with prepared statements is explicit and zero-dependency. You see the exact SQL that runs.",
     },
     {
-        q: "Why PBKDF2 and not argon2?",
-        a: "Workers doesn't have native argon2. PBKDF2 via Web Crypto (crypto.subtle) is zero-dependency and runs natively in the Workers runtime. Workers caps PBKDF2 at 100K iterations (OWASP recommends 600K, which throws NotSupportedError) — 100K is still OWASP-acceptable for PBKDF2-HMAC-SHA256.",
-    },
-    {
         q: "Is it production-ready?",
         a: "Yes — every guardrail a deployed app needs is wired and tested, not scaffolded: PBKDF2 passwords (Web Crypto), DB-backed sessions (not JWT), CSRF origin checks, security headers (CSP, nosniff, frame denial), versioned migrations, HSTS, and an E2E suite that boots the full app. The server side is not a demo — it is the same code path that runs in production. What is missing is your business logic, and that is the point.",
     },
