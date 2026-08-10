@@ -9,10 +9,6 @@ const faqs: { q: string; a: string }[] = [
         a: "Same stack, different runtime. Kilat runs on Cloudflare Workers — zero ops, 300+ edge locations, free to start. Dulak runs on Bun — self-hosted, no platform limits, unlimited everything. Outgrew Kilat's free tier? Migrate to Dulak with a single AI agent prompt.",
     },
     {
-        q: "Why Cloudflare Workers and not Bun?",
-        a: "Zero ops. No Docker, no VPS, no process supervisor. wrangler deploy and you're live on 300+ edge locations. D1 replicates read-only copies to the nearest edge automatically. The free tier is enough for most apps. Pick Bun (Dulak) for maximum control and synchronous SQLite; pick Workers (Kilat) for zero-ops edge deployment.",
-    },
-    {
         q: "Do I have to use React?",
         a: "No. Kilat ships templates for React 19, Svelte 5, and Vue 3 — each with vanilla CSS or Tailwind CSS v4. The server side (Hono, D1, auth) is identical across all of them.",
     },
