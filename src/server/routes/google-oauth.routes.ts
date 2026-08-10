@@ -37,7 +37,7 @@ interface GoogleProfile {
   picture: string | null;
 }
 
-async function exchangeCode(code: string): Promise<string> {
+async function exchangeCode(code: string, redirectUri: string): Promise<string> {
   const res = await fetch("https://oauth2.googleapis.com/token", {
     method: "POST",
     headers: { "content-type": "application/x-www-form-urlencoded" },
@@ -45,7 +45,7 @@ async function exchangeCode(code: string): Promise<string> {
       code,
       client_id: config.google.clientId!,
       client_secret: config.google.clientSecret!,
-      redirect_uri: `${config.appUrl}/auth/google/callback`,
+      redirect_uri: redirectUri,
       grant_type: "authorization_code",
     }),
   });
@@ -118,7 +118,7 @@ export const googleOauthRoutes = () => {
     setOAuthStateCookie(c, state);
     const params = new URLSearchParams({
       client_id: config.google.clientId,
-      redirect_uri: `${config.appUrl}/auth/google/callback`,
+      redirect_uri: `${new URL(c.req.url).origin}/auth/google/callback`,
       response_type: "code",
       scope: "openid email profile",
       state,
@@ -132,7 +132,6 @@ export const googleOauthRoutes = () => {
 
   app.get("/auth/google/callback", async (c) => {
     const url = safeUrl(c.req.url);
-    url.protocol = safeUrl(config.appUrl).protocol;
     const code = url.searchParams.get("code");
     const state = url.searchParams.get("state");
     const stored = getCookie(c, OAUTH_STATE_COOKIE) ?? null;
@@ -148,7 +147,7 @@ export const googleOauthRoutes = () => {
       return new Response(null, { status: 302, headers: { location: new URL("/login?notice=google_failed", url).toString() } });
     }
     try {
-      const accessToken = await exchangeCode(code);
+      const accessToken = await exchangeCode(code, `${url.origin}/auth/google/callback`);
       const profile = await fetchProfile(accessToken);
       const user = await findOrCreateGoogleUser(profile);
       // Avatar storage skipped in CF experiment (no R2). Update avatar

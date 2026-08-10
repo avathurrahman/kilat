@@ -1,25 +1,18 @@
 /**
- * OG image generator — build-time static route.
+ * OG image for the landing page (/).
  *
- * /og/[...slug].png — slug matches the content collection entry slug
- * (e.g. "deployment/docker" → /og/deployment/docker.png).
- *
- * Generates a 1200×630 PNG with the page title, description, and Kilat
- * branding via Satori (HTML/CSS → SVG) + resvg (SVG → PNG).
+ * Unlike docs pages (which use /og/[...slug].png keyed by content collection
+ * slug), the landing page is a standalone Astro page — not part of the docs
+ * collection. This route generates a dedicated 1200×630 PNG with the Kilat
+ * tagline and branding.
  */
 import satori from "satori";
 import { Resvg } from "@resvg/resvg-js";
 import { readFile } from "node:fs/promises";
-import { fileURLToPath } from "node:url";
-import { join, dirname } from "node:path";
-import { getCollection } from "astro:content";
+import { join } from "node:path";
 
 const ROOT = process.cwd();
 
-/**
- * Brand URL shown in OG images. Derived from `site` in astro.config.mjs.
- * When you fork Kilat and change the domain, this updates automatically.
- */
 const SITE_URL = process.env.SITE_URL ?? "https://kilatjs.pages.dev";
 const BRAND_URL = new URL(SITE_URL).hostname.replace(/^www\./, "");
 const WIDTH = 1200;
@@ -34,15 +27,16 @@ const COLORS = {
 };
 
 let logoCache: string | null = null;
+
 async function loadLogo(): Promise<string> {
   if (logoCache) return logoCache;
-  const logoPath = join(ROOT, "src", "assets", "logo.svg");
-  const svg = await readFile(logoPath, "utf-8");
-  logoCache = `data:image/svg+xml;base64,${Buffer.from(svg).toString("base64")}`;
+  const buf = await readFile(join(ROOT, "src/assets/logo.svg"));
+  logoCache = `data:image/svg+xml;base64,${buf.toString("base64")}`;
   return logoCache;
 }
 
 let fontCache: Buffer | null = null;
+
 async function loadFont(): Promise<Buffer> {
   if (fontCache) return fontCache;
   const candidates = [
@@ -61,25 +55,7 @@ async function loadFont(): Promise<Buffer> {
   );
 }
 
-export async function getStaticPaths() {
-  const docs = await getCollection("docs");
-  return docs
-    .filter((entry) => (entry.slug ?? entry.id) && (entry.slug ?? entry.id).length > 0)
-    .map((entry) => ({
-      params: { slug: entry.slug ?? entry.id },
-      props: {
-        title: entry.data.title,
-        description: (entry.data.description ?? "") as string,
-      },
-    }));
-}
-
-export async function GET({
-  props,
-}: {
-  props: { title: string; description: string };
-}) {
-  const { title, description } = props;
+export async function GET() {
   const logo = await loadLogo();
   const font = await loadFont();
 
@@ -98,6 +74,7 @@ export async function GET({
           fontFamily: "Arial",
         },
         children: [
+          // Logo + brand name
           {
             type: "div",
             props: {
@@ -126,45 +103,59 @@ export async function GET({
               ],
             },
           },
+          // Main tagline
           {
             type: "div",
             props: {
               style: {
                 display: "flex",
                 flexDirection: "column",
-                gap: "20px",
+                gap: "24px",
               },
               children: [
                 {
                   type: "div",
                   props: {
                     style: {
-                      fontSize: 56,
+                      fontSize: 64,
                       fontWeight: 700,
                       color: COLORS.text,
-                      lineHeight: 1.2,
-                      maxWidth: "900px",
+                      lineHeight: 1.15,
+                      maxWidth: "950px",
                     },
-                    children: title,
+                    children: "Edge-native full-stack starter",
                   },
                 },
-                description
-                  ? {
-                      type: "div",
-                      props: {
-                        style: {
-                          fontSize: 28,
-                          color: COLORS.textMuted,
-                          lineHeight: 1.4,
-                          maxWidth: "850px",
-                        },
-                        children: description,
-                      },
-                    }
-                  : null,
-              ].filter(Boolean),
+                {
+                  type: "div",
+                  props: {
+                    style: {
+                      fontSize: 30,
+                      color: COLORS.accentBright,
+                      fontWeight: 600,
+                      lineHeight: 1.3,
+                    },
+                    children:
+                      "Cloudflare Workers + Hono + D1 + Inertia v3",
+                  },
+                },
+                {
+                  type: "div",
+                  props: {
+                    style: {
+                      fontSize: 26,
+                      color: COLORS.textMuted,
+                      lineHeight: 1.4,
+                      maxWidth: "880px",
+                    },
+                    children:
+                      "Auth, migrations, tests — wired end to end. Deploy to 300+ edge locations.",
+                  },
+                },
+              ],
             },
           },
+          // Brand URL footer
           {
             type: "div",
             props: {

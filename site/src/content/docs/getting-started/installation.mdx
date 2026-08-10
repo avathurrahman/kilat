@@ -41,7 +41,7 @@ bun install
 
 ### Configure wrangler.toml
 
-Open `wrangler.toml` and set your D1 database ID and app URL:
+Open `wrangler.toml` and set your D1 database ID:
 
 ```toml
 name = "my-app"
@@ -51,7 +51,6 @@ compatibility_flags = ["nodejs_compat"]
 
 [vars]
 NODE_ENV = "development"
-APP_URL = "http://localhost:8787"
 SSR = "true"
 MAIL_DRIVER = "log"
 MAIL_FROM = "no-reply@example.com"

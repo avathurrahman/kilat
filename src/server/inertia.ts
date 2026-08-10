@@ -56,16 +56,14 @@ export class Inertia {
 		return this.c.headers["x-inertia"] === "true";
 	}
 
-	/** The request URL with scheme corrected from APP_URL.
-	 *  Behind a TLS-terminating proxy (Cloudflare Flexible), the origin
-	 *  connection is HTTP so request.url is http:// — but the browser
-	 *  sees https://. We take the scheme from APP_URL (set by the operator)
-	 *  and keep the host from the actual request (supports multi-domain). */
+	/** The request URL as the client sees it. On Cloudflare Workers, the
+	 *  Worker runs at the edge after TLS termination, so request.url already
+	 *  carries the correct scheme (https:// for HTTPS requests). No APP_URL
+	 *  scheme correction is needed — that pattern only applies to origin
+	 *  servers behind a TLS-terminating proxy. */
 	private get requestUrl(): URL {
 		try {
-			const url = new URL(this.c.request.url);
-			url.protocol = new URL(config.appUrl).protocol;
-			return url;
+			return new URL(this.c.request.url);
 		} catch {
 			return new URL("http://localhost/");
 		}

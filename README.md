@@ -205,7 +205,6 @@ values (API keys, OAuth secrets) should use `wrangler secret put` instead.
 
 | Variable | Default | Notes |
 | --- | --- | --- |
-| `APP_URL` | `http://localhost:8787` | Absolute base URL (email links, OAuth redirects). Set to your Workers URL in production. |
 | `NODE_ENV` | `development` | `production` enables Secure cookie flag |
 | `SSR` | `true` | `false` ships an empty shell — client renders from scratch (no hydrate) |
 | `MAIL_DRIVER` | `log` | `log` \| `resend` \| `mailtrap` |
@@ -384,7 +383,8 @@ read-only copies to the nearest edge automatically.
 
 1. Add a Custom Domain or Route in the Cloudflare dashboard (Workers & Pages →
    your Worker → Settings → Domains & Routes).
-2. Update `APP_URL` in `wrangler.toml` to your custom domain.
+2. If using Google OAuth, add the new callback URL in the Google Cloud Console
+   (e.g. `https://kilat.example.com/auth/google/callback`).
 3. Re-deploy: `bun run deploy`.
 
 ## Styling
