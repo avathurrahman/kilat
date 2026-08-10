@@ -1,25 +1,30 @@
 /**
- * End-to-end test suite: boots the full app (Hono + bun:sqlite + Inertia)
- * against an in-memory database and drives it via app.request().
+ * End-to-end test suite: boots the full app (Hono + D1 mock + Inertia)
+ * against an in-memory SQLite database and drives it via app.request().
  * Run with: bun test --isolate (each file gets fresh globals — the env
  * setup in beforeAll must not leak across files).
  */
 import { afterAll, beforeAll, describe, expect, it } from "bun:test";
+import { applyMigrations, closeD1Mock, createD1Mock, type D1Mock } from "./d1-mock";
 
 let app: Awaited<ReturnType<typeof import("../src/server/app")["createApp"]>>;
+let d1: D1Mock;
 
 beforeAll(async () => {
-	// Must be set before any app module is imported (config/db read env at import).
-	process.env.DATABASE_PATH = ":memory:";
-	process.env.RATE_LIMIT_AUTH_MAX = "1000";
-	process.env.RATE_LIMIT_GLOBAL_MAX = "10000";
+	// Create an in-memory D1 mock and apply migrations before importing the app
+	// (db.ts reads the D1 binding at query time, not import time, but initDb
+	// must be called before any route handler runs).
+	d1 = createD1Mock();
+	await applyMigrations(d1);
+	const { initDb } = await import("../src/server/db");
+	// Cast is safe: D1Mock implements the same prepare/exec shape as D1Database.
+	initDb(d1 as unknown as D1Database);
 	const { createApp } = await import("../src/server/app");
 	app = createApp({ version: "test-version", js: "app.js", css: "app.css" });
 });
 
-afterAll(async () => {
-	const { db } = await import("../src/server/db");
-	db.close();
+afterAll(() => {
+	closeD1Mock(d1);
 });
 
 const BASE = "http://localhost:3000";
@@ -116,7 +121,7 @@ describe("auth basics", () => {
 		const data = await page(res);
 		expect(data.component).toBe("Register");
 		expect(data.props.errors.name).toBe("Name must be at least 2 characters.");
-		expect(data.props.errors.email).toBe("Enter a valid email address.");
+		expect(data.props.errors.email).toBe("Please enter a valid email address.");
 	});
 
 	it("rejects duplicate email", async () => {
@@ -276,7 +281,7 @@ describe("roles & admin", () => {
 		const { createUserWithRole } = await import("../src/server/db");
 		const { hashPassword } = await import("../src/server/auth");
 		const hash = await hashPassword("password123");
-		createUserWithRole.get("Boss", "boss@example.com", hash, "admin");
+		await createUserWithRole("Boss", "boss@example.com", hash, "admin");
 		const cookie = await registerUser("filler@example.com");
 
 		const login = await call("/login", {
@@ -295,7 +300,9 @@ describe("roles & admin", () => {
 		expect(data.props.users.meta.total).toBeGreaterThanOrEqual(2);
 		expect(data.props.users.meta.currentPage).toBe(1);
 		expect(
-			data.props.users.data.some((u: any) => u.email === "boss@example.com"),
+			data.props.users.data.some(
+				(u: { email: string }) => u.email === "boss@example.com",
+			),
 		).toBe(true);
 
 		// non-admin cookie is still bounced
@@ -412,7 +419,11 @@ describe("infrastructure", () => {
 		expect((await res.json()).status).toBe("ok");
 	});
 
-	it("serves built asset files from /assets/*", async () => {
+	// Static assets are served by the Workers Static Assets binding (env.ASSETS),
+	// not by the Hono app — `run_worker_first = ["/*", "!/assets/*"]` bypasses
+	// the Worker entirely for /assets/*. This cannot be tested via app.request()
+	// without mocking the ASSETS fetcher binding. Skipped intentionally.
+	it.skip("serves built asset files from /assets/*", async () => {
 		const { mkdirSync, rmSync, writeFileSync } = await import("node:fs");
 		mkdirSync("dist/assets", { recursive: true });
 		const file = "dist/assets/__route_test__.css";
