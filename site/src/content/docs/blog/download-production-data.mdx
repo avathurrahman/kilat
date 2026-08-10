@@ -6,31 +6,43 @@ authors: maulana
 tags: ["d1", "database", "deployment"]
 ---
 
-When your Kilat app is live on Cloudflare, your D1 database lives at the edge.
+When your app is live on Cloudflare, your D1 database lives at the edge.
 Here's how to pull that data down to your local machine for debugging,
 backups, or offline development.
+
+:::tip[Don't want to memorize commands?]
+Copy-paste this prompt into your AI agent:
+
+```
+Export my production D1 database to a local SQL file and import it into my local D1.
+Read the database name from wrangler.toml, then use
+`wrangler d1 execute <database-name> --remote --export ./backup.sql` and
+`wrangler d1 execute <database-name> --local --file ./backup.sql`.
+```
+
+:::
 
 ## The one-command export
 
 ```sh
-wrangler d1 execute kilat --remote --command "SELECT * FROM users" --output users.json
+wrangler d1 execute <database-name> --remote --command "SELECT * FROM users" --output users.json
 ```
 
 This runs a SQL query against your **remote** D1 database and writes the
-results to a JSON file. Replace `kilat` with your D1 database name from
-`wrangler.toml`.
+results to a JSON file. Replace `<database-name>` with your D1 database name
+from `wrangler.toml`.
 
 ## Export all tables
 
-Kilat has four tables: `users`, `sessions`, `password_resets`, and `uploads`.
-To export everything:
+The starter includes four tables: `users`, `sessions`, `password_resets`,
+and `uploads`. To export everything:
 
 ```sh
 # Export each table to JSON
-wrangler d1 execute kilat --remote --command "SELECT * FROM users" --output export/users.json
-wrangler d1 execute kilat --remote --command "SELECT * FROM sessions" --output export/sessions.json
-wrangler d1 execute kilat --remote --command "SELECT * FROM password_resets" --output export/password_resets.json
-wrangler d1 execute kilat --remote --command "SELECT * FROM uploads" --output export/uploads.json
+wrangler d1 execute <database-name> --remote --command "SELECT * FROM users" --output export/users.json
+wrangler d1 execute <database-name> --remote --command "SELECT * FROM sessions" --output export/sessions.json
+wrangler d1 execute <database-name> --remote --command "SELECT * FROM password_resets" --output export/password_resets.json
+wrangler d1 execute <database-name> --remote --command "SELECT * FROM uploads" --output export/uploads.json
 ```
 
 :::tip[Skip sessions and password resets]
@@ -45,13 +57,13 @@ After exporting, push the data into your local D1 database:
 
 ```sh
 # Apply migrations first (if local DB is empty)
-wrangler d1 migrations apply kilat --local
+wrangler d1 migrations apply <database-name> --local
 
 # Import each table
-wrangler d1 execute kilat --local --file export/users.json
-wrangler d1 execute kilat --local --file export/sessions.json
-wrangler d1 execute kilat --local --file export/password_resets.json
-wrangler d1 execute kilat --local --file export/uploads.json
+wrangler d1 execute <database-name> --local --file export/users.json
+wrangler d1 execute <database-name> --local --file export/sessions.json
+wrangler d1 execute <database-name> --local --file export/password_resets.json
+wrangler d1 execute <database-name> --local --file export/uploads.json
 ```
 
 ## Export as raw SQL
@@ -59,14 +71,14 @@ wrangler d1 execute kilat --local --file export/uploads.json
 If you prefer a SQL dump (like `pg_dump`), use the `--export` flag:
 
 ```sh
-wrangler d1 execute kilat --remote --export ./backup.sql
+wrangler d1 execute <database-name> --remote --export ./backup.sql
 ```
 
 This produces a `.sql` file with `INSERT` statements for all tables. To
 restore locally:
 
 ```sh
-wrangler d1 execute kilat --local --file ./backup.sql
+wrangler d1 execute <database-name> --local --file ./backup.sql
 ```
 
 ## Automate it
@@ -76,12 +88,12 @@ Add a script to your `package.json`:
 ```json
 {
   "scripts": {
-    "db:pull": "wrangler d1 execute kilat --remote --export ./backup.sql && wrangler d1 execute kilat --local --file ./backup.sql"
+    "db:pull": "wrangler d1 execute <database-name> --remote --export ./backup.sql && wrangler d1 execute <database-name> --local --file ./backup.sql"
   }
 }
 ```
 
-Then `bun run db:pull` syncs remote → local in one step.
+Then `bun run db:pull` syncs remote to local in one step.
 
 ## What about uploaded files?
 
@@ -91,7 +103,7 @@ production, you'll need to fetch them via HTTP or sync from your R2 bucket:
 
 ```sh
 # If using R2 for uploads
-wrangler r2 object get kilat-uploads/avatar-123.png ./local-uploads/avatar-123.png
+wrangler r2 object get <bucket-name>/avatar-123.png ./local-uploads/avatar-123.png
 ```
 
 ## Caveats
