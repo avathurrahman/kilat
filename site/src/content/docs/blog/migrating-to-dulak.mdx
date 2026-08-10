@@ -1,7 +1,7 @@
 ---
 title: Migrating from Kilat to Dulak
 date: 2026-08-10
-excerpt: Move your Kilat app from Cloudflare Workers + D1 to Dulak's Bun + bun:sqlite — same stack, no platform limits, full self-hosted control.
+excerpt: Move your app from Cloudflare Workers + D1 to Dulak's Bun + bun:sqlite — same stack, no platform limits, full self-hosted control.
 authors: maulana
 tags: ["dulak", "migration", "deployment"]
 ---
@@ -41,13 +41,13 @@ with minimal changes.
 
 ## Step 2: Export your D1 data
 
-From your Kilat project, export the production database:
+From your project, export the production database:
 
 ```sh
-wrangler d1 execute kilat --remote --export ./backup.sql
+wrangler d1 execute <database-name> --remote --export ./backup.sql
 ```
 
-This produces a SQL file with `INSERT` statements for all tables.
+Replace `<database-name>` with your D1 database name from `wrangler.toml`.
 
 ## Step 3: Import into Dulak's bun:sqlite
 
@@ -84,15 +84,15 @@ Kilat uses PBKDF2 (Web Crypto, 100K iterations). Dulak uses argon2id
 
 ## Step 4: Move uploaded files
 
-If your Kilat app has file uploads (avatars, etc.), copy them from
+If your app has file uploads (avatars, etc.), copy them from
 production to Dulak's upload directory:
 
 ```sh
 # If uploads are in R2
-wrangler r2 object get kilat-uploads/<filename> ./data/uploads/<filename>
+wrangler r2 object get <bucket-name>/<filename> ./data/uploads/<filename>
 
-# Or download via HTTP from your Kilat app
-curl -o ./data/uploads/avatar-123.png https://your-kilat-app.workers.dev/uploads/avatar-123.png
+# Or download via HTTP from your app
+curl -o ./data/uploads/avatar-123.png https://your-app.workers.dev/uploads/avatar-123.png
 ```
 
 Update the `path` column in the `uploads` table to point to the new local
@@ -104,9 +104,9 @@ UPDATE uploads SET path = './data/uploads/' || id WHERE 1=1;
 
 ## Step 5: Move environment variables
 
-Dulak uses a `.env` file instead of Wrangler secrets. Map your Kilat config:
+Dulak uses a `.env` file instead of Wrangler secrets. Map your config:
 
-| Kilat (wrangler.toml / secrets) | Dulak (.env) |
+| wrangler.toml / secrets | Dulak (.env) |
 | --- | --- |
 | `APP_URL` | `APP_URL` |
 | `GOOGLE_CLIENT_ID` | `GOOGLE_CLIENT_ID` |
@@ -141,8 +141,8 @@ Bun + systemd + Cloudflare (origin rule or tunnel), no reverse proxy needed.
 ### Option C: Single binary
 
 ```sh
-bun build --compile src/index.ts --outfile kilat-app
-./kilat-app
+bun build --compile src/index.ts --outfile my-app
+./my-app
 ```
 
 ## Step 7: Update Google OAuth redirect
