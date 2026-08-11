@@ -2,11 +2,11 @@
 const faqs: { q: string; a: string }[] = [
     {
         q: "How is Kilat different from Next.js, Nuxt, or SvelteKit?",
-        a: "Those are meta-frameworks that couple a server model to one client framework and leave auth and persistence to you. Kilat is a single Cloudflare Worker with Hono + D1 + Inertia v3, auth already wired, raw SQL instead of an ORM, and React, Svelte, or Vue as a swappable template. Pick a meta-framework for RSC or edge middleware; pick Kilat for a wired, ownable, edge-native stack.",
+        a: "Meta-frameworks give you conventions to learn and leave auth, sessions, and persistence for you to wire. Kilat ships those already wired — auth, DB-backed sessions, CSRF, migrations — as plain TypeScript you own and can grep when something breaks. One command deploys to 300+ edge locations on a free tier of 100K requests/day (3× Vercel's 100K/month). Pick a meta-framework for RSC or edge middleware; pick Kilat for a wired, ownable stack you understand in an afternoon.",
     },
     {
         q: "How is Kilat different from Dulak?",
-        a: "Same stack, different runtime. Kilat runs on Cloudflare Workers — zero ops, 300+ edge locations, free to start. Dulak runs on Bun — self-hosted, no platform limits, unlimited everything. Outgrew Kilat's free tier? Migrate to Dulak with a single AI agent prompt.",
+        a: "Same philosophy: fork it, skip the architecture decisions, just build your app and deploy. The difference is the runtime. Kilat runs on Cloudflare Workers — zero ops, 300+ edge locations, free to start (100K req/day, 500 MB D1). Dulak runs on Bun — self-hosted, no platform limits: unlimited requests, CPU time, and database size, argon2 instead of PBKDF2, sync DB access. Start on Kilat's free tier; when you outgrow it, migrate to Dulak with a single AI agent prompt.",
     },
     {
         q: "Do I have to use React?",
