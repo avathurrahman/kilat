@@ -1,0 +1,258 @@
+---
+title: Inertia.js
+description: How Kilat uses Inertia v3 — the server adapter, SSR strategy, page registry, and the wire protocol between Worker and client.
+---
+
+Kilat uses [Inertia.js v3](https://inertiajs.org/) to bridge the server
+(Hono on Cloudflare Workers) and the client (React 19, Svelte 5, or Vue 3)
+without building a separate API. The server renders pages, the client
+hydrates them — no JSON fetch loop, no client-side router to configure.
+
+## How Inertia works
+
+Inertia is not a framework — it's a protocol. The server decides which page
+component to render and what props to pass. The client receives either:
+
+- **Full HTML** (browser visit) — server-rendered markup + a JSON page
+  payload embedded in a `<script data-page>` tag. The client hydrates.
+- **JSON only** (Inertia XHR) — during SPA navigation, the client sends
+  `X-Inertia: true` and gets just the page payload back. No HTML, no
+  re-render of the shell.
+
+```text
+Browser visit (full page load):
+  Server → HTML shell + SSR markup + <script data-page>JSON</script>
+  Client → hydrate React/Svelte/Vue into #app
+
+SPA navigation (click a link):
+  Client → GET /dashboard with X-Inertia: true
+  Server → JSON page payload only
+  Client → swap component, update URL, no full reload
+```
+
+## The server adapter
+
+`src/server/inertia.ts` is a minimal, dependency-free Inertia v3 server
+adapter. It implements the wire protocol without importing the Inertia
+server package — just the `Page` type from `@inertiajs/core`.
+
+### Three response modes
+
+```ts
+// src/server/inertia.ts (simplified)
+class Inertia {
+  async render(component, props, options) {
+    const page = this.page(component, props);
+
+    if (this.isXhr) {
+      // SPA navigation — JSON only
+      if (!this.versionMatches) return this.locationVisit(); // 409
+      return this.json(page);                                 // 200 JSON
+    }
+
+    // Browser visit — full HTML
+    if (config.ssr && !this.c.user) {
+      const rendered = await renderPage(page);  // react-dom/server
+      return this.html(rendered.head, rendered.body);
+    }
+    // SSR disabled or authenticated route — empty shell + JSON
+    return this.html([], this.clientBody(page));
+  }
+}
+```
+
+| Request type | Response | When |
+| --- | --- | --- |
+| Browser visit, SSR on, guest | Full HTML with SSR markup | `/login`, `/register` — SEO-relevant |
+| Browser visit, SSR on, authed | Empty shell + JSON payload | `/dashboard`, `/profile` — no SEO benefit |
+| Browser visit, SSR off | Empty shell + JSON payload | `SSR=false` in wrangler.toml |
+| Inertia XHR (`X-Inertia: true`) | JSON page payload | SPA navigation |
+| Version mismatch | `409 + X-Inertia-Location` | Assets changed — client must reload |
+
+### Why SSR is skipped for authenticated routes
+
+Authenticated pages are behind an auth wall — no SEO benefit. The client
+hydrates and replaces server HTML anyway, so SSR is pure CPU waste. Shipping
+the empty shell (JSON payload + empty `#app` div) is faster and uses less
+CPU time on Workers.
+
+### Redirects
+
+```ts
+// Uses new Response() instead of Response.redirect() because the latter
+// returns immutable headers on Workers — secureHeaders crashes.
+redirect(path: string, status: 302 | 303 = 303): Response {
+  return new Response(null, {
+    status,
+    headers: { location: new URL(path, this.requestUrl).toString() },
+  });
+}
+```
+
+`303` for redirect-after-write (POST → GET), `302` for plain navigation.
+
+### Validation errors
+
+```ts
+// 422 with field errors, Inertia-aware
+error(component, errors, status = 422): Response {
+  if (this.isXhr) return this.json(this.page(component, {}, errors), status);
+  return new Response(JSON.stringify({ errors }), { status, /* ... */ });
+}
+```
+
+The `app.onError` handler catches `ValidationFailed` from TypeBox and calls
+`inertia.error()` with the failing component name — the client receives
+field errors and re-renders the form with them.
+
+## Shared props
+
+Every page receives these props automatically, merged by the adapter:
+
+```ts
+{
+  auth: { user: User | null },     // resolved from session
+  errors: Record<string, string>,  // validation errors or flash errors
+  flash: { success?, error? },     // one-shot flash messages
+  ...routeProps                    // passed by the handler
+}
+```
+
+The client reads them via `usePage()`:
+
+```tsx
+const { props } = usePage();
+const user = props.auth.user;
+const flash = props.flash;
+```
+
+## The page registry
+
+Pages are registered explicitly in `src/client/pages.ts` — no auto-discovery,
+no glob imports. This works identically in the SSR renderer (running inside
+the Worker) and the client bundle (esbuild):
+
+```ts
+// src/client/pages.ts
+import Dashboard from "./pages/Dashboard";
+import Login from "./pages/Login";
+// ...
+
+export const pages = {
+  "./pages/Dashboard.tsx": { default: Dashboard },
+  "./pages/Login.tsx": { default: Login },
+  // ...
+};
+```
+
+The `resolve` function maps the Inertia component name (e.g. `"Dashboard"`)
+to the registered module:
+
+```ts
+const resolve = (name: string) =>
+  pages[`./pages/${name}.tsx`]?.default ?? notFoundPage!;
+```
+
+## Client bootstrap
+
+`src/client/app.tsx` bootstraps Inertia on the client:
+
+```tsx
+createInertiaApp({
+  id: "app",
+  resolve,
+  nonce: cspNonce,           // from <meta name="csp-nonce">
+  strictMode: true,          // React Strict Mode (dev only)
+  setup({ el, App, props }) {
+    if (el.hasAttribute("data-server-rendered")) {
+      hydrateRoot(el, <App {...props} />);    // SSR → hydrate
+    } else {
+      createRoot(el).render(<App {...props} />);  // no SSR → fresh render
+    }
+  },
+});
+```
+
+The `data-server-rendered` attribute tells the client whether to hydrate
+(matching server DOM) or render from scratch (empty shell).
+
+## SSR renderer
+
+`src/client/ssr.tsx` runs inside the Worker process — no separate SSR
+server, no Node.js, no WebSocket:
+
+```tsx
+export async function renderPage(page: Page) {
+  return createInertiaApp({
+    page,
+    render: renderToString,    // react-dom/server
+    resolve: (name) => pages[`./pages/${name}.tsx`]?.default ?? notFoundPage!,
+    setup: ({ App, props }) => <App {...props} />,
+  });
+}
+```
+
+React 19's `renderToString` runs inside the Workers bundle directly. Svelte
+and Vue templates pre-build the SSR bundle to `dist/ssr.js` — the Worker
+imports it instead of compiling at runtime.
+
+## CSP nonce
+
+The Inertia adapter generates a per-request nonce (base64, 22 chars) and
+tags all inline scripts and styles:
+
+```html
+<meta name="csp-nonce" content="Hpq6Tcpuapxbtek9n+IUkg==" />
+<script nonce="Hpq6Tcpuapxbtek9n+IUkg==">/* theme boot + page JSON */</script>
+```
+
+The CSP header allows `script-src 'self' 'nonce-...'` — no
+`'unsafe-inline'`. The client reads the nonce from the `<meta>` tag and
+passes it to Inertia for inline styles (progress bar, error modal).
+
+## Asset version negotiation
+
+The asset version is the JS content hash from esbuild. Inertia uses it for
+cache busting:
+
+1. Client loads with version `abc123`.
+2. Server deploys new assets with version `def456`.
+3. Client navigates (XHR) with `X-Inertia-Version: abc123`.
+4. Server sees mismatch → `409 + X-Inertia-Location`.
+5. Client full-reloads → gets new HTML with version `def456`.
+
+This ensures users always get the latest assets without manual refresh
+prompts.
+
+## Forms
+
+Kilat uses `useForm` from `@inertiajs/react` (or `@inertiajs/svelte` /
+`@inertiajs/vue3`) for form submissions:
+
+```tsx
+const form = useForm({ email: "", password: "" });
+
+const submit = (e) => {
+  e.preventDefault();
+  form.post("/login");
+};
+```
+
+Inertia handles the POST as an XHR, receives validation errors as 422, and
+re-renders the form with `form.errors`. No fetch, no state management, no
+API client.
+
+## Svelte and Vue templates
+
+The adapter is framework-agnostic — it only produces the page payload
+(JSON) and HTML shell. The `resolve` function and `renderPage` differ per
+template:
+
+| Template | SSR renderer | Client package |
+| --- | --- | --- |
+| React | `react-dom/server` `renderToString` | `@inertiajs/react` |
+| Svelte | Pre-built `dist/ssr.js` (svelte/server) | `@inertiajs/svelte` |
+| Vue | Pre-built `dist/ssr.js` (vue/server-renderer) | `@inertiajs/vue3` |
+
+The server adapter (`inertia.ts`) is identical across all templates — only
+the SSR renderer and client bootstrap change.

@@ -65,6 +65,7 @@ export default defineConfig({
               label: "Request lifecycle",
               slug: "architecture/request-lifecycle",
             },
+            { label: "Inertia.js", slug: "architecture/inertia" },
             { label: "Rate limiting", slug: "architecture/rate-limiting" },
             { label: "File uploads", slug: "architecture/file-uploads" },
             { label: "Mailer", slug: "architecture/mailer" },
