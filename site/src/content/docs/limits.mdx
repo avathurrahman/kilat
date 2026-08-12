@@ -1,11 +1,11 @@
 ---
 title: Limits
-description: Cloudflare Workers and D1 free plan limits, and when to consider upgrading.
+description: Cloudflare Workers, D1, and R2 free plan limits, and when to consider upgrading.
 ---
 
-Kilat runs entirely on **Cloudflare Workers** and **D1**. The free tier is
-generous enough for development, staging, and small production apps — but it
-has hard limits you should know about before scaling.
+Kilat runs entirely on **Cloudflare Workers**, **D1**, and **R2**. The free
+tier is generous enough for development, staging, and small production apps —
+but it has hard limits you should know about before scaling.
 
 ## Workers Free plan limits
 
@@ -71,6 +71,20 @@ Use appropriate indexes to keep queries fast. Large `UPDATE` or `DELETE`
 operations must be batched (e.g. 1,000 rows at a time) to avoid exceeding
 execution limits.
 
+## R2 Free plan limits
+
+Kilat stores user avatars in **R2**. The free tier covers avatar storage for
+most apps:
+
+| Limit | Free |
+| --- | --- |
+| Storage | 10 GB |
+| Class A operations (writes, lists) | 10 million / month |
+| Class B operations (reads) | 10 million / month |
+
+R2 has **no egress fees** — serving avatars from R2 costs nothing in
+bandwidth, unlike S3 or other object stores.
+
 ## Will Kilat fit in the free tier?
 
 | Use case | Fits free? | Why |
@@ -129,9 +143,9 @@ ceilings.
 | CPU time limit | 10 ms (free) / 5 min (paid) | Unlimited |
 | Database size | 500 MB (free) / 10 GB (paid) | Unlimited (disk-bound) |
 | Deploy | `wrangler deploy` | Docker / VPS / any Node host |
-| Rate limiting | No-op stub (stateless Workers) | In-memory fixed-window |
+| Rate limiting | KV-backed fixed-window | In-memory fixed-window |
 | Password hashing | PBKDF2 (100K iterations, Web Crypto) | argon2id (Bun.password) |
-| Uploads | Manual | tus resumable uploads built-in |
+| Uploads | R2 avatar storage built-in | tus resumable uploads built-in |
 
 Dulak gives you full control: deploy via Docker on any VPS, no vendor
 lock-in, no platform quotas. The trade-off is you manage your own server
@@ -146,4 +160,5 @@ AI agent to automate the whole migration.
 
 - [Cloudflare Workers limits](https://developers.cloudflare.com/workers/platform/limits/)
 - [Cloudflare D1 limits](https://developers.cloudflare.com/d1/platform/limits/)
+- [Cloudflare R2 limits](https://developers.cloudflare.com/r2/platform/limits/)
 - [Dulak — self-hosted alternative on Bun](https://dulak.pages.dev)
