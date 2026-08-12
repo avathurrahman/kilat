@@ -55,7 +55,7 @@ per-request by `initConfig(env)` in `src/server/config.ts`.
 | ------------- | ---------------------------------------------------- | ------------------------------ |
 | `NODE_ENV`    | `production` enables `secure` cookies                | —                              |
 | `SSR`         | `false` disables server-side rendering (client-only) | `true`                         |
-| `MAIL_DRIVER` | `log` \| `resend` \| `mailtrap`                      | `log`                          |
+| `MAIL_DRIVER` | `log` \| `resend` \| `mailtrap` — see [Mailer](/architecture/mailer/) | `log` |
 | `MAIL_FROM`   | From address for outgoing email                      | `no-reply@example.com`         |
 
 Adding a config key means updating **three places**: `config.ts` (the `EnvVars`
@@ -125,7 +125,7 @@ migrations_dir = "migrations"
 `d1` reference used by `db.ts`. All queries are async:
 `await env.DB.prepare(sql).bind(...).first()`.
 
-## R2 binding (avatar storage)
+## R2 binding (file uploads)
 
 ```toml
 [[r2_buckets]]
@@ -133,17 +133,19 @@ binding = "AVATARS"
 bucket_name = "kilat-avatars"
 ```
 
-Avatar uploads stream to R2 via multipart form-data at `POST /profile/avatar`.
-`binding = "AVATARS"` exposes the bucket as `env.AVATARS` in the Worker. Create
-the bucket once per project:
+File uploads stream to R2 via multipart form-data. `binding = "AVATARS"`
+exposes the bucket as `env.AVATARS` in the Worker. Create the bucket once
+per project:
 
 ```sh
 npx wrangler r2 bucket create kilat-avatars
 ```
 
-Uploaded avatars are served from `/avatars/*` via `avatars.routes.ts`, with edge
-caching so repeat fetches hit the CDN. Local dev (`wrangler dev --local`)
-simulates the binding via Miniflare.
+Uploaded files are served from `/avatars/*` via `avatars.routes.ts`, with
+edge caching. Local dev (`wrangler dev --local`) simulates the binding via
+Miniflare. See [File uploads](/architecture/file-uploads/) for the full
+pattern — key structure, security, graceful degradation, and adding new
+upload types.
 
 ## ASSETS binding
 
