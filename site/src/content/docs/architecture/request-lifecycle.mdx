@@ -8,28 +8,43 @@ debugging and extending Kilat.
 
 ## The chain
 
-```mermaid
-flowchart TD
-  A[Workers runtime] -->|fetch request, env| B[worker.ts]
-  B --> C[initConfig env]
-  C --> D[initDb env.DB]
-  D --> E[app.fetch request, env]
-  E --> F[requestLogger — correlation ID]
-  F --> G[checkOrigin — CSRF]
-  G --> H[secureHeaders — CSP, nosniff, HSTS]
-  H --> I[inertiaMiddleware — session resolve]
-  I --> J{guards + handler}
-  J -->|auth required| K[requireAuth / requireRole]
-  K -->|fail| L[redirect / 401]
-  K -->|pass| M[route handler]
-  J -->|no guard| M
-  M --> N{Inertia render}
-  N -->|browser visit| O[SSR HTML + data-page JSON]
-  N -->|X-Inertia XHR| P[JSON page payload]
-  N -->|asset mismatch| Q[409 + X-Inertia-Location]
-  M -.->|ValidationFailed| R[onError → 422 Inertia]
-  M -.->|other error| S[onError → 500]
-  E -.->|no route| T[notFound → 404 Inertia]
+```text
+Workers runtime
+  │
+  ▼ fetch(request, env)
+worker.ts
+  │
+  ├── initConfig(env)     → config singleton
+  ├── initDb(env.DB)      → db singleton
+  │
+  ▼ app.fetch(request, env)
+┌─────────────────────────────────────────────────┐
+│ 1. requestLogger        → correlation ID + JSON log │
+│ 2. checkOrigin           → CSRF (Origin header)     │
+│ 3. secureHeaders         → nosniff, DENY, HSTS      │
+│ 4. CSP nonce (post-resp) → script-src 'nonce-...'   │
+│ 5. inertiaMiddleware     → resolve session → c.var  │
+│ 6. globalLimiter         → KV rate limit (200/60s)  │
+└─────────────────────────────────────────────────┘
+  │
+  ▼
+guards + handler
+  │
+  ├── requireAuth ── fail ──→ redirect /login
+  ├── requireRole ── fail ──→ redirect /dashboard
+  ├── guestOnly   ── fail ──→ redirect /dashboard
+  │
+  ▼ pass
+route handler
+  │
+  ├── c.var.inertia.render(component, props)
+  │     ├── browser visit  → SSR HTML + data-page JSON
+  │     ├── X-Inertia XHR  → JSON page payload
+  │     └── version mismatch → 409 + X-Inertia-Location
+  │
+  ├── ValidationFailed ──→ onError → 422 Inertia
+  ├── other error       ──→ onError → 500
+  └── no route          ──→ notFound → 404 Inertia
 ```
 
 ## Step by step
@@ -56,9 +71,9 @@ across requests.
 
 ### 2. `requestLogger` — correlation ID
 
-`src/server/logger.ts` assigns a `crypto.randomUUID()` correlation ID to every
-request and logs the method + path. This is the first middleware — every
-subsequent log line can reference the ID.
+`src/server/logger.ts` assigns a random correlation ID to every request and
+logs the method + path as structured JSON. This is the first middleware —
+every subsequent log line can reference the ID.
 
 ### 3. `checkOrigin` — CSRF
 
@@ -69,10 +84,11 @@ check.
 
 ### 4. `secureHeaders` — security headers
 
-Hono's `secureHeaders` middleware sets CSP, `X-Content-Type-Options: nosniff`,
-`X-Frame-Options: DENY`, referrer policy, permissions policy, and HSTS. The
-CSP uses `script-src 'unsafe-inline'` because Inertia embeds the page payload
-as inline JSON — external script injection is still blocked.
+Hono's `secureHeaders` middleware sets `X-Content-Type-Options: nosniff`,
+`X-Frame-Options: DENY`, referrer policy, permissions policy, and HSTS.
+A per-request CSP nonce is generated in `inertiaMiddleware` and applied
+after the response — inline scripts (theme boot, page payload) and inline
+styles carry the nonce, so `script-src 'unsafe-inline'` is not needed.
 
 ### 5. `inertiaMiddleware` — session resolve
 
