@@ -64,6 +64,9 @@ What's missing is your business logic — and that's the point.
 bun create kilat@latest my-app
 ```
 
+No Bun? `npx create-kilat@latest my-app` works too (falls back to npm install),
+but you'll need [Bun](https://bun.sh) for the test suite and build scripts.
+
 The interactive prompt lets you pick a **framework** (React 19, Svelte 5,
 Vue 3) and a **styling** approach (vanilla CSS or Tailwind CSS v4) via
 arrow-key navigation. It downloads the template, patches `wrangler.toml`,
