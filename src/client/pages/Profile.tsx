@@ -70,7 +70,7 @@ export default function Profile() {
 
 	const submitPass = (e: FormEvent) => {
 		e.preventDefault();
-		pass.post("/profile/password");
+		pass.post("/profile/password", { onSuccess: () => pass.reset() });
 	};
 
 	if (!user) return null; // guarded server-side by requireAuth
