@@ -71,6 +71,10 @@ Use appropriate indexes to keep queries fast. Large `UPDATE` or `DELETE`
 operations must be batched (e.g. 1,000 rows at a time) to avoid exceeding
 execution limits.
 
+For high-traffic deployments where session lookups become the bottleneck,
+enable [KV session caching](/auth/sessions-guards/#session-caching-optional-kv-backed)
+to serve cached sessions from KV (~0 D1 queries on hit) instead of D1.
+
 ## R2 Free plan limits
 
 Kilat stores user avatars in **R2**. The free tier covers avatar storage for

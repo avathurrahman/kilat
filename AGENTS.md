@@ -34,17 +34,17 @@ contributions broke the architecture by inventing their own layout.
 
 ```
 src/
-├── worker.ts               # Cloudflare Workers entry: initConfig, initDb, app.fetch
+├── worker.ts               # Cloudflare Workers entry: initConfig, initDb, initSessionCache, app.fetch
 ├── server/
 │   ├── app.ts              # composition: middleware order, onError, notFound, routes
 │   ├── config.ts           # validated env config via initConfig(env) per-request
 │   ├── db.ts               # D1 async query helpers (initDb pattern, prepare/bind/first/all/run)
-│   ├── auth.ts             # PBKDF2 (Web Crypto), sessions, flash, cookies, guards
+│   ├── auth.ts             # PBKDF2 (Web Crypto), sessions, flash, cookies, guards, optional KV session cache
 │   ├── inertia.ts          # Inertia v3 server adapter (framework-light)
 │   ├── inertia-middleware.ts # per-request session resolve → c.var (AppEnv)
 │   ├── validation.ts       # TypeBox JSON validation → ValidationFailed (422)
 │   ├── mailer.ts           # mail drivers: log / resend / mailtrap
-│   ├── rate-limit.ts       # no-op stub (stateless Workers — use KV/DO for real limiting)
+│   ├── rate-limit.ts       # KV-backed fixed-window rate limiter (fails open without binding)
 │   ├── logger.ts           # per-request console.log + crypto.randomUUID for request ID
 │   ├── security.ts         # CSRF origin check (headers via hono/secure-headers)
 │   ├── url.ts              # defensive request-URL parsing
@@ -137,10 +137,11 @@ dist/                       # build output (gitignored), served by Workers Stati
 - **All DB calls are async.** D1 is async — `await env.DB.prepare(sql).bind(...).first()`.
   This cascades to all route handlers, auth functions, and middleware. Never
   use sync DB patterns.
-- **`initConfig(env)` + `initDb(env.DB)` run per-request** in the fetch
-  handler (`src/worker.ts`). They mutate module-level singletons — cheap
-  pointer assignments. Do not cache state across requests; Workers
-  isolates are stateless.
+- **`initConfig(env)` + `initDb(env.DB)` + `initSessionCache(env.SESSION_KV)`
+  run per-request** in the fetch handler (`src/worker.ts`). They mutate
+  module-level singletons — cheap pointer assignments. Do not cache state
+  across requests; Workers isolates are stateless. `initSessionCache` is
+  a no-op when `SESSION_KV` is absent (tests, local dev without the binding).
 - **`Response.redirect()` returns immutable headers on Workers.** Hono's
   `secureHeaders` middleware crashes trying to append security headers to a
   frozen Response. Use `new Response(null, { status, headers: { location } })`

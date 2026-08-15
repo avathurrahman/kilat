@@ -17,11 +17,12 @@ proxy. `wrangler deploy` and you're live on 300+ edge locations.
 flowchart LR
   Browser -->|Inertia XHR / full HTML| Worker
   subgraph Cloudflare Workers
-    Worker -->|initConfig, initDb| Config
+    Worker -->|initConfig, initDb, initSessionCache| Config
     Worker -->|session, flash| Auth
+    Auth -->|cache miss| D1[(D1)]
+    Auth -.->|cache hit| KV[(SESSION_KV)]
     Worker -->|page payloads| InertiaAdapter
     InertiaAdapter -->|renderToString| ReactSSR
-    Worker -->|SQL| D1[(D1)]
   end
   ReactSSR --> Browser
   Google -->|OAuth callback| Worker
@@ -186,8 +187,8 @@ bun run deploy       # https://<your-worker>.<your-subdomain>.workers.dev
 
 - **Auth**: register, login, logout — PBKDF2 passwords (Web Crypto, 100K
   iterations — Workers caps at 100K), DB-backed sessions (httpOnly
-  `SameSite=Lax` cookies, 30-day expiry, `Secure` in production), CSRF
-  (Origin check).
+  `SameSite=Lax` cookies, 30-day expiry, `Secure` in production), optional
+  KV session cache for high-traffic deployments, CSRF (Origin check).
 - **Forgot / reset password** with email delivery (see Mail below) and
   hashed reset tokens (60-minute expiry).
 - **Google OAuth** register-or-login (zero-dep, plain fetch; button hidden
@@ -221,6 +222,8 @@ values (API keys, OAuth secrets) should use `wrangler secret put` instead.
 | `RATE_LIMIT_GLOBAL_WINDOW` | `60` | global window in seconds |
 | `RATE_LIMIT_AUTH_MAX` | `30` | auth requests per window (`/login`, `/register`, password reset) |
 | `RATE_LIMIT_AUTH_WINDOW` | `60` | auth window in seconds |
+| `SESSION_CACHE_ENABLED` | `false` | `true` enables KV-backed session caching (requires `SESSION_KV` binding — see [Session caching](#session-caching)) |
+| `SESSION_CACHE_TTL_SECONDS` | `300` | KV session cache TTL in seconds (lower = faster revocation, more D1 misses) |
 
 Invalid/incomplete config fails fast with a clear message
 (`src/server/config.ts`).
@@ -241,6 +244,45 @@ Invalid/incomplete config fails fast with a clear message
 - **resend**: set `RESEND_API_KEY` (`MAIL_DRIVER=resend`).
 - **mailtrap**: set `MAILTRAP_API_TOKEN` (`MAIL_DRIVER=mailtrap`); add
   `MAILTRAP_INBOX_ID` to use the sandbox endpoint.
+
+### Session caching
+
+By default, every request resolves the session from D1 (2 queries:
+`findSession` + `findUserById`). This is correct and simple, but D1 is
+single-threaded per database — throughput caps at ~1,000 QPS for sub-millisecond
+queries. At thousands of RPS, session lookups become the bottleneck.
+
+Enable KV-backed session caching to eliminate D1 queries on cache hits:
+
+1. Create a KV namespace: `npx wrangler kv namespace create SESSION_KV`
+   (paste the id into `wrangler.toml` under `[[kv_namespaces]]`).
+2. Set `SESSION_CACHE_ENABLED = "true"` in `wrangler.toml` `[vars]`.
+3. Deploy.
+
+**How it works**: on a cache miss, the session is read from D1 and written
+to KV with a TTL (`SESSION_CACHE_TTL_SECONDS`, default 300s). Subsequent
+requests for the same session token hit KV (globally distributed, ~10ms)
+and skip D1 entirely. Logout and flash consumption invalidate the KV entry.
+D1 remains the source of truth — a KV miss always falls back to D1.
+
+**Security trade-off**: `deleteOtherSessionsByToken` (password change) cannot
+enumerate other sessions' KV keys, so revoked sessions on other devices may
+remain cache-valid for up to `SESSION_CACHE_TTL_SECONDS`. Reduce the TTL or
+disable the cache if this window is unacceptable.
+
+### D1 read replication
+
+D1 automatically deploys read-only replicas to all supported regions (no
+extra cost). Reads are served from the nearest replica, reducing latency
+globally. Enable it in the Cloudflare dashboard:
+
+**Workers & Pages → your D1 database → Settings → Read Replication → Enable**.
+
+Read replication is already active for databases created after the beta
+(April 2025). Reads may be served by replicas with slight replication lag;
+the D1 Sessions API ensures sequential consistency for read-after-write
+paths (e.g., session lookup immediately after login). Writes always go to
+the single primary.
 
 ## Architecture
 
@@ -292,15 +334,18 @@ dist/                       # build output (gitignored), served by Workers Stati
 ## How the pieces fit
 
 - **Request lifecycle**: `worker.ts` fetch handler → `initConfig(env)` +
-  `initDb(env.DB)` → `app.fetch(request, env)` → `requestLogger` (correlation
-  id) → `checkOrigin` (CSRF) → `secureHeaders` → inertia session resolve →
-  guards + handler → Inertia render (SSR HTML for browsers, JSON for
-  `X-Inertia` XHR) → `onError` (422 validation, 500) / `notFound` (404).
+  `initDb(env.DB)` + `initSessionCache(env.SESSION_KV)` → `app.fetch` →
+  `requestLogger` (correlation id) → `checkOrigin` (CSRF) → `secureHeaders`
+  → inertia session resolve (`resolveSession`: user + flash in one call,
+  KV-cached when enabled) → guards + handler → Inertia render (SSR HTML for
+  browsers, JSON for `X-Inertia` XHR) → `onError` (422, 500) / `notFound` (404).
 - **Auth**: PBKDF2 via `crypto.subtle` (100K iterations — Workers caps at
   100K, OWASP-acceptable for PBKDF2-HMAC-SHA256); 256-bit random session
-  tokens in D1; cookies httpOnly/`SameSite=Lax`/Secure-in-prod. Logout
-  deletes the session row server-side. `passwordHash` never leaves the
-  server.
+  tokens in D1 (SHA-256 hashed at rest); cookies httpOnly/`SameSite=Lax`/
+  Secure-in-prod. Optional KV session cache for high-traffic deployments
+  (see [Session caching](#session-caching)). Logout deletes the session row
+  server-side + invalidates the KV cache entry. `passwordHash` never leaves
+  the server.
 - **Guards** are Hono middleware: `requireAuth`, `guestOnly`,
   `requireRole('admin')` (non-admins redirect to `/dashboard`). They return
   a Response to short-circuit the chain, or call `next()`.
@@ -420,9 +465,15 @@ Kilat ships **six template variants** — pick one via the scaffolder:
 - **No custom compression**: Wrangler/Miniflare auto-compresses responses
   with gzip/br natively. A custom compress middleware causes
   double-compression.
-- **Rate limiting is a no-op stub**: Workers isolates are stateless — an
-  in-memory `Map` doesn't persist across requests. Use KV or Durable
-  Objects for real per-IP limiting when you need it.
+- **Rate limiting is KV-backed**: Workers isolates are stateless — an
+  in-memory `Map` doesn't persist across requests. The rate limiter uses
+  the `RATE_LIMIT_KV` binding (fails open without it).
+- **Session caching is optional**: D1 is single-threaded (~1K QPS for
+  sub-ms queries). For high-traffic deployments, enable `SESSION_CACHE_ENABLED`
+  with a `SESSION_KV` binding to cache session lookups. D1 remains the source
+  of truth; KV is a cache with explicit invalidation on logout/flash consume.
+  `deleteOtherSessionsByToken` cannot enumerate other sessions' KV keys —
+  revoked sessions on other devices expire via TTL (default 300s).
 - **CSP uses `script-src 'unsafe-inline'`** because Inertia embeds the page
   payload as inline JSON; external script injection is still blocked.
 - **`import.meta.glob` was removed from Bun 1.3** — the page registry uses

@@ -7,12 +7,12 @@ description: The src/ layout, how worker.ts wires the request, and the dual esbu
 
 ```
 src/
-├── worker.ts               # Cloudflare Workers entry: initConfig, initDb, app.fetch
+├── worker.ts               # Cloudflare Workers entry: initConfig, initDb, initSessionCache, app.fetch
 ├── server/
 │   ├── app.ts              # composition: middleware order, onError, notFound, routes
 │   ├── config.ts           # validated env config via initConfig(env) per-request
 │   ├── db.ts               # D1 async query helpers (prepare/bind/first/all/run)
-│   ├── auth.ts             # PBKDF2 (Web Crypto), sessions, flash, cookies, guards
+│   ├── auth.ts             # PBKDF2 (Web Crypto), sessions, flash, cookies, guards, optional KV session cache
 │   ├── inertia.ts          # Inertia v3 server adapter (SSR shell, XHR, 409)
 │   ├── inertia-middleware.ts # per-request session resolve → c.var (AppEnv)
 │   ├── validation.ts       # TypeBox JSON validation → ValidationFailed (422)
@@ -63,6 +63,7 @@ KV, and R2 bindings plus environment variables:
 import { createApp } from "./server/app";
 import { initConfig, type EnvVars } from "./server/config";
 import { initDb } from "./server/db";
+import { initSessionCache } from "./server/auth";
 import manifest from "../dist/manifest.json";
 import type { InertiaAssets } from "./server/inertia";
 
@@ -71,6 +72,7 @@ export interface Env extends EnvVars {
   ASSETS: Fetcher;
   RATE_LIMIT_KV: KVNamespace;
   AVATARS: R2Bucket;
+  SESSION_KV?: KVNamespace;
 }
 
 const assets = manifest as InertiaAssets;
@@ -80,15 +82,17 @@ export default {
   async fetch(request: Request, env: Env): Promise<Response> {
     initConfig(env);       // validate env → module-level config singleton
     initDb(env.DB);        // bind D1 → module-level db singleton
+    initSessionCache(env.SESSION_KV); // bind KV → session cache (no-op if absent)
     return app.fetch(request, env);
   },
 } satisfies ExportedHandler<Env>;
 ```
-
-`initConfig` and `initDb` run **per-request** — they mutate module-level
-singletons via cheap pointer assignments. Workers isolates are stateless; do
-not cache state across requests. The app is built once at module load (the
-`createApp(assets)` call); only config and DB are re-bound each request.
+`initConfig`, `initDb`, and `initSessionCache` run **per-request** — they
+mutate module-level singletons via cheap pointer assignments. Workers isolates
+are stateless; do not cache state across requests. `initSessionCache` is a
+no-op when `SESSION_KV` is absent (tests, local dev without the binding). The
+app is built once at module load (the `createApp(assets)` call); only config,
+DB, and session KV are re-bound each request.
 
 ## The dual esbuild build pattern
 

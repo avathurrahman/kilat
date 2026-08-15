@@ -16,7 +16,7 @@ worker.ts
   │
   ├── initConfig(env)     → config singleton
   ├── initDb(env.DB)      → db singleton
-  │
+  ├── initSessionCache()  → sessionKv singleton (no-op without binding)
   ▼ app.fetch(request, env)
 ┌─────────────────────────────────────────────────┐
 │ 1. requestLogger        → correlation ID + JSON log │
@@ -58,8 +58,9 @@ D1 + ASSETS bindings and environment variables:
 // src/worker.ts
 export default {
   async fetch(request: Request, env: Env): Promise<Response> {
-    initConfig(env);       // validate env → module-level config singleton
-    initDb(env.DB);        // bind D1 → module-level db singleton
+    initConfig(env);              // validate env → module-level config singleton
+    initDb(env.DB);               // bind D1 → module-level db singleton
+    initSessionCache(env.SESSION_KV); // bind KV → module-level sessionKv singleton
     return app.fetch(request, env);
   },
 } satisfies ExportedHandler<Env>;
@@ -91,11 +92,11 @@ after the response — inline scripts (theme boot, page payload) and inline
 styles carry the nonce, so `script-src 'unsafe-inline'` is not needed.
 
 ### 5. `inertiaMiddleware` — session resolve
-
 `src/server/inertia-middleware.ts` reads the session cookie, resolves the
-user from D1, and stores the `Inertia` adapter + user on `c.var` (the
-`AppEnv` context). Every downstream handler reads `c.var.inertia` and
-`c.var.user` — no per-route session plumbing.
+user and flash from D1 via `resolveSession` (or KV cache when enabled), and
+stores the `Inertia` adapter + user on `c.var` (the `AppEnv` context). Every
+downstream handler reads `c.var.inertia` and `c.var.user` — no per-route
+session plumbing.
 
 ### 6. Guards + handler
 

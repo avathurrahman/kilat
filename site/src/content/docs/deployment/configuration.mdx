@@ -57,6 +57,8 @@ per-request by `initConfig(env)` in `src/server/config.ts`.
 | `SSR`         | `false` disables server-side rendering (client-only) | `true`                         |
 | `MAIL_DRIVER` | `log` \| `resend` \| `mailtrap` — see [Mailer](/architecture/mailer/) | `log` |
 | `MAIL_FROM`   | From address for outgoing email                      | `no-reply@example.com`         |
+| `SESSION_CACHE_ENABLED` | `true` enables KV session caching (requires `SESSION_KV`) | `false` |
+| `SESSION_CACHE_TTL_SECONDS` | KV session cache TTL in seconds              | `300`                          |
 
 Adding a config key means updating **three places**: `config.ts` (the `EnvVars`
 interface + `initConfig`), `wrangler.toml` `[vars]`, and the README env table.
@@ -107,8 +109,40 @@ Local dev (`wrangler dev --local`) simulates the namespace via Miniflare, so any
 placeholder id works. **Without the binding the limiter fails OPEN** — requests
 pass through unthrottled — so keep this binding in your production
 `wrangler.toml`. Optional tuning vars (`RATE_LIMIT_GLOBAL_MAX`,
-`RATE_LIMIT_GLOBAL_WINDOW`, `RATE_LIMIT_AUTH_MAX`, `RATE_LIMIT_AUTH_WINDOW`)
-override the defaults of 200 req/60s global and 30 req/60s auth.
+`RATE_LIMIT_GLOBAL_WINDOW`, `RATE_LIMIT_AUTH_MAX`, `RATE_LIMIT_AUTH_WINDOW`) override the defaults of 200 req/60s global and
+30 req/60s auth.
+
+## KV binding (session caching, optional)
+
+```toml
+[[kv_namespaces]]
+binding = "SESSION_KV"
+id = "YOUR_SESSION_KV_NAMESPACE_ID"
+```
+
+Session caching is **off by default** — every request resolves the session from
+D1 (2 queries). Enable it for high-traffic deployments where D1's
+single-threaded ~1K QPS limit becomes a bottleneck:
+
+```toml
+[vars]
+SESSION_CACHE_ENABLED = "true"
+SESSION_CACHE_TTL_SECONDS = "300"
+```
+
+`resolveSession` checks KV first (`session:{hash}` key). On a hit, it returns
+the cached user + flash with zero D1 queries. On a miss, it falls back to D1
+and populates KV. Logout and flash consumption invalidate the KV entry. D1
+remains the source of truth. See [Sessions & guards](/auth/sessions-guards/)
+for the full pattern and security trade-offs.
+
+```sh
+npx wrangler kv namespace create SESSION_KV
+```
+
+Local dev simulates the namespace via Miniflare. Without the binding,
+`initSessionCache` receives `undefined` and all cache operations are no-ops —
+`resolveSession` falls back to D1-only.
 
 ## D1 binding
 
@@ -196,6 +230,10 @@ head_sampling_rate = 1
 binding = "RATE_LIMIT_KV"
 id = "YOUR_STAGING_KV_ID"
 
+[[env.staging.kv_namespaces]]
+binding = "SESSION_KV"
+id = "YOUR_STAGING_SESSION_KV_ID"
+
 [[env.staging.d1_databases]]
 binding = "DB"
 database_id = "YOUR_STAGING_D1_ID"
@@ -222,6 +260,10 @@ head_sampling_rate = 0.1
 [[env.production.kv_namespaces]]
 binding = "RATE_LIMIT_KV"
 id = "YOUR_PRODUCTION_KV_ID"
+
+[[env.production.kv_namespaces]]
+binding = "SESSION_KV"
+id = "YOUR_PRODUCTION_SESSION_KV_ID"
 
 [[env.production.d1_databases]]
 binding = "DB"
@@ -254,8 +296,9 @@ Production samples 10% of requests (`head_sampling_rate = 0.1`) versus staging's
 npx wrangler kv namespace create RATE_LIMIT_KV --env staging
 npx wrangler d1 create kilat-staging
 npx wrangler r2 bucket create kilat-avatars-staging
+npx wrangler kv namespace create SESSION_KV --env staging
 
 npx wrangler kv namespace create RATE_LIMIT_KV --env production
-npx wrangler d1 create kilat-production
 npx wrangler r2 bucket create kilat-avatars-production
+npx wrangler kv namespace create SESSION_KV --env production
 ```
