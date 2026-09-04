@@ -34,17 +34,17 @@ contributions broke the architecture by inventing their own layout.
 
 ```
 src/
-├── worker.ts               # Cloudflare Workers entry: initConfig, initDb, app.fetch
+├── worker.ts               # Cloudflare Workers entry: initConfig, initDb, initSessionCache, app.fetch
 ├── server/
 │   ├── app.ts              # composition: middleware order, onError, notFound, routes
 │   ├── config.ts           # validated env config via initConfig(env) per-request
 │   ├── db.ts               # D1 async query helpers (initDb pattern, prepare/bind/first/all/run)
-│   ├── auth.ts             # PBKDF2 (Web Crypto), sessions, flash, cookies, guards
+│   ├── auth.ts             # PBKDF2 (Web Crypto), sessions, flash, cookies, guards, optional KV session cache
 │   ├── inertia.ts          # Inertia v3 server adapter (framework-light)
 │   ├── inertia-middleware.ts # per-request session resolve → c.var (AppEnv)
 │   ├── validation.ts       # TypeBox JSON validation → ValidationFailed (422)
 │   ├── mailer.ts           # mail drivers: log / resend / mailtrap
-│   ├── rate-limit.ts       # no-op stub (stateless Workers — use KV/DO for real limiting)
+│   ├── rate-limit.ts       # KV-backed fixed-window rate limiter (fails open without binding)
 │   ├── logger.ts           # per-request console.log + crypto.randomUUID for request ID
 │   ├── security.ts         # CSRF origin check (headers via hono/secure-headers)
 │   ├── url.ts              # defensive request-URL parsing
@@ -114,7 +114,10 @@ dist/                       # build output (gitignored), served by Workers Stati
 8. **UI work follows the design system — never invents a parallel one.**
    Reuse tokens from `styles.css` and existing components; don't reach for
    AI-default aesthetics (beige, ghost cards, purple gradients, italic
-   serif accents). New components add co-located styles per rule 7.
+   serif accents). New components add co-located styles per rule 7. Forms use
+   `useForm` + `<form>` from `@inertiajs/react` — see
+   `.llm-wiki/wiki/concepts/concept-inertia-form-patterns.md` for the
+   decision rule and examples.
 
 ## Route conventions
 
@@ -134,10 +137,11 @@ dist/                       # build output (gitignored), served by Workers Stati
 - **All DB calls are async.** D1 is async — `await env.DB.prepare(sql).bind(...).first()`.
   This cascades to all route handlers, auth functions, and middleware. Never
   use sync DB patterns.
-- **`initConfig(env)` + `initDb(env.DB)` run per-request** in the fetch
-  handler (`src/worker.ts`). They mutate module-level singletons — cheap
-  pointer assignments. Do not cache state across requests; Workers
-  isolates are stateless.
+- **`initConfig(env)` + `initDb(env.DB)` + `initSessionCache(env.SESSION_KV)`
+  run per-request** in the fetch handler (`src/worker.ts`). They mutate
+  module-level singletons — cheap pointer assignments. Do not cache state
+  across requests; Workers isolates are stateless. `initSessionCache` is
+  a no-op when `SESSION_KV` is absent (tests, local dev without the binding).
 - **`Response.redirect()` returns immutable headers on Workers.** Hono's
   `secureHeaders` middleware crashes trying to append security headers to a
   frozen Response. Use `new Response(null, { status, headers: { location } })`
@@ -175,6 +179,31 @@ dist/                       # build output (gitignored), served by Workers Stati
   `bun run test` before finishing. `tsc` only covers `src/` and `scripts/`.
 - Tests use `bun:test` against the Hono app directly (not the Workers
   runtime). D1 calls need mocking or a local D1 instance via Miniflare.
+
+## Dev server
+
+AI agents use the lifecycle manager (`scripts/dev.ts`), not raw `wrangler dev`.
+Human developers use `bun run dev` (foreground) — agents use `dev:background`.
+
+- **Start:** `bun run dev:background` — server jalan detached di background,
+  lock file di `.kilat/dev.json` (PID, port, URL). Output "Server ready"
+  muncul saat server siap — tunggu itu sebelum test. Build client assets
+  otomatis jika `dist/manifest.json` belum ada.
+- **Cek status:** `bun run dev:status` — cek server hidup, port, PID, 3 baris
+  log terakhir.
+- **Cek log:** `bun run dev:logs` (50 baris terakhir) atau
+  `bun run scripts/dev.ts logs --follow` (tail -f style, blocking).
+- **Stop:** `bun run dev:stop` — graceful SIGTERM, fallback SIGKILL, hapus
+  lock file.
+- **Restart manual:** `bun run dev:restart` (stop + background). Wrangler dev
+  TIDAK auto-reload saat file berubah — setelah edit client code, jalankan
+  `bun run build` lalu `bun run dev:restart`. Edit server code juga perlu
+  restart karena wrangler dev tidak watch `src/`.
+- **JANGAN pakai `hub op:start`** — hub-spawned process tidak pick up
+  wrangler dev dengan benar.
+- **Kalau user sudah nyalakan server sendiri:** biarkan. Jangan stop,
+  jangan restart, jangan nyalakan yang kedua. Pakai `bun run dev:status`
+  untuk detect, atau tanya user port-nya.
 
 ## Browser testing
 

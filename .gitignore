@@ -13,3 +13,5 @@ data/uploads/
 .llm-wiki/.discoveries/
 .wrangler/
 create-kilat/bun.lock
+src/client/.tailwind.css
+.kilat/

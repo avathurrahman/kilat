@@ -1,0 +1,138 @@
+---
+title: Why Cloudflare Workers over Netlify or Vercel
+date: 2026-08-10
+excerpt: Kilat runs on Cloudflare Workers, not Netlify or Vercel. Here's the reasoning — performance, pricing, database, and the edge model.
+authors: maulana
+tags: ["cloudflare", "comparisons", "deployment"]
+---
+
+Kilat targets **Cloudflare Workers** as its deployment platform. Not Netlify,
+not Vercel. This isn't tribalism — it's a deliberate technical choice based
+on what matters for a production full-stack app.
+
+## The short version
+
+| | Cloudflare Workers | Vercel | Netlify |
+| --- | --- | --- | --- |
+| Runtime | V8 isolates (not containers) | Node.js / Edge (V8) | Node.js / Edge (Deno) |
+| Database | D1 (SQLite at edge, included) | Postgres (external, $$) | Postgres (external, $$) |
+| Free requests | 100K/day | 100K/month | 100K/month |
+| Paid starts at | $5/month | $20/month | $19/month |
+| Edge locations | 300+ | 100+ | 100+ |
+| Cold starts | Sub-millisecond | ~250 ms (Node) | ~250 ms (Node) |
+| SQLite at edge | ✅ D1 | ❌ | ❌ |
+
+## 1. D1 — SQLite at the edge
+
+This is the biggest reason. Kilat is designed around **D1**, Cloudflare's
+SQLite-at-the-edge database. D1 replicates read-only copies to the nearest
+edge location automatically. Your database queries have single-digit
+millisecond latency from anywhere in the world.
+
+Neither Vercel nor Netlify offers anything like this. You'd need an external
+Postgres (Neon, Supabase, PlanetScale) — which means:
+
+- Another account, another bill, another auth system
+- Network hops from edge to database (50–200 ms)
+- Connection pooling complexity
+- No read replicas at the edge unless you pay more
+
+With D1, the database is a binding (`env.DB`), not a network call. It's
+baked into the Workers runtime.
+
+## 2. V8 isolates, not containers
+
+Cloudflare Workers runs on V8 isolates — the same engine as Chrome. No
+container startup, no VM boot. Cold starts are sub-millisecond because
+there's nothing to boot.
+
+Vercel and Netlify's edge functions also use V8, but their default Node.js
+runtime spins up a container per request. That's ~250 ms cold start vs.
+Workers' under 1 ms.
+
+For a full-stack app with SSR + auth + database queries on every request,
+cold start latency matters. Kilat's SSR renders inside the Worker —
+sub-millisecond startup means your first byte is fast even after idle.
+
+## 3. Pricing
+
+| | Free | Paid |
+| --- | --- | --- |
+| **Cloudflare Workers** | 100K req/day, 10 ms CPU | $5/mo, unlimited requests, 5 min CPU |
+| **Vercel** | 100K req/month, 10 s function timeout | $20/mo (Pro), 1000 GB-hr compute |
+| **Netlify** | 100K req/month, 10 s function timeout | $19/mo (Pro), 100 GB-hr compute |
+
+Cloudflare's free tier is **per day** (100K/day = ~3M/month). Vercel and
+Netlify's free tier is **per month** (100K/month total). For a real app
+with SSR on every page load, 100K/month runs out fast.
+
+The paid tier is also cheaper: $5/month on Cloudflare vs. $19–20/month.
+And D1 is included — no separate database bill.
+
+## 4. No vendor lock-in (Hono is runtime-agnostic)
+
+Kilat uses [Hono](https://hono.dev/) as its HTTP framework — not a
+Cloudflare-specific API. Hono runs on Workers, Node.js, Bun, and Deno.
+The `app.fetch(request, env)` pattern is the same everywhere.
+
+This means if Cloudflare's limits become a problem, you can move to
+[Dulak](https://dulak.pages.dev) (Bun + bun:sqlite) without rewriting your
+routes, your auth, or your client code. The server-side code is portable.
+
+Vercel and Netlify push you toward their own APIs (Vercel's `next/`,
+Netlify's functions). Moving off those platforms means rewriting handlers.
+
+## 5. Workers Static Assets
+
+Kilat serves client assets (JS, CSS) via Workers Static Assets binding
+(`env.ASSETS`). This means:
+
+- Assets bypass the Worker entirely (`!/assets/*` in `wrangler.toml`)
+- Served from Cloudflare's CDN directly — no Worker invocation cost
+- Content-hashed filenames = infinite cache TTL
+
+On Vercel/Netlify, static assets are served from their CDN too, but you
+don't get the same fine-grained control over what hits your function vs.
+what bypasses it.
+
+## 6. The 10 ms CPU limit (the honest trade-off)
+
+This is the real constraint. Workers Free gives you **10 ms of CPU time
+per request**. SSR + auth + D1 queries typically use 10–20 ms — right at
+or over the limit.
+
+This means:
+
+- **Development and staging**: fine, low traffic
+- **API-only (no SSR)**: fine, JSON responses use ~2–3 ms
+- **Production with SSR on free tier**: will hit the limit
+
+The fix is Workers Paid ($5/month, 5 min CPU). Or migrate to Dulak
+(self-hosted, no limits). See our [Limits page](/limits/) for the full
+breakdown.
+
+## When to pick Vercel or Netlify instead
+
+Cloudflare Workers isn't always the right choice:
+
+- **You need Postgres** — D1 is SQLite. If your app needs Postgres-specific
+  features (JSONB operators, full-text search, materialized views), Vercel
+  - Neon or Netlify + Supabase makes more sense.
+- **You need long-running processes** — Workers are request-scoped. No
+  WebSockets beyond the request lifetime, no background jobs without Cron
+  Triggers or Queues. Vercel/Netlify support longer function timeouts.
+- **You're already on Next.js** — Vercel is the natural deploy target for
+  Next.js. Kilat isn't Next.js, so this doesn't apply.
+
+## Conclusion
+
+Kilat chose Cloudflare Workers because:
+
+1. **D1** — SQLite at the edge, no external database bill
+2. **V8 isolates** — sub-millisecond cold starts
+3. **Cheaper** — $5/mo paid vs $19–20/mo, 100K/day free vs 100K/month
+4. **Portable** — Hono is runtime-agnostic, no platform lock-in
+5. **Fine-grained control** — Static Assets binding bypasses the Worker
+
+The trade-off is the 10 ms CPU limit on the free tier. For production SSR,
+you'll need Workers Paid ($5/month) — still cheaper than the alternatives.

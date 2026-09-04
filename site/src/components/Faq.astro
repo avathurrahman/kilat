@@ -2,15 +2,11 @@
 const faqs: { q: string; a: string }[] = [
     {
         q: "How is Kilat different from Next.js, Nuxt, or SvelteKit?",
-        a: "Those are meta-frameworks that couple a server model to one client framework and leave auth and persistence to you. Kilat is a single Cloudflare Worker with Hono + D1 + Inertia v3, auth already wired, raw SQL instead of an ORM, and React, Svelte, or Vue as a swappable template. Pick a meta-framework for RSC or edge middleware; pick Kilat for a wired, ownable, edge-native stack.",
+        a: "Meta-frameworks give you conventions to learn and leave auth, sessions, and persistence for you to wire. Kilat ships those already wired — auth, DB-backed sessions, CSRF, migrations — as plain TypeScript you own and can grep when something breaks. One command deploys to 300+ edge locations on a free tier of 100K requests/day (3× Vercel's 100K/month). Pick a meta-framework for RSC or edge middleware; pick Kilat for a wired, ownable stack you understand in an afternoon.",
     },
     {
         q: "How is Kilat different from Dulak?",
-        a: "Dulak runs on Bun (Bun.serve + bun:sqlite + Bun.build). Kilat runs on Cloudflare Workers (Wrangler + D1 + esbuild). Same philosophy, same structure, same Inertia v3 SSR pattern — different runtime. Dulak is for self-hosting on a VPS; Kilat is for zero-ops edge deployment. The dual esbuild build pattern (pre-build SSR to dist/ssr.js) is Kilat's key innovation — Wrangler's internal esbuild can't compile .svelte or .vue files, so we pre-build SSR to plain JS.",
-    },
-    {
-        q: "Why Cloudflare Workers and not Bun?",
-        a: "Zero ops. No Docker, no VPS, no process supervisor. wrangler deploy and you're live on 300+ edge locations. D1 replicates read-only copies to the nearest edge automatically. The free tier is enough for most apps. Pick Bun (Dulak) for maximum control and synchronous SQLite; pick Workers (Kilat) for zero-ops edge deployment.",
+        a: "Same philosophy: fork it, skip the architecture decisions, just build your app and deploy. The difference is the runtime. Kilat runs on Cloudflare Workers — zero ops, 300+ edge locations, free to start (100K req/day, 500 MB D1). Dulak runs on Bun — self-hosted, no platform limits: unlimited requests, CPU time, and database size, argon2 instead of PBKDF2, sync DB access. Start on Kilat's free tier; when you outgrow it, migrate to Dulak with a single AI agent prompt.",
     },
     {
         q: "Do I have to use React?",
@@ -19,10 +15,6 @@ const faqs: { q: string; a: string }[] = [
     {
         q: "Why no ORM?",
         a: "ORMs were built to help humans avoid writing SQL. In 2026, AI generates correct, optimized raw SQL on demand — the human-friction problem ORMs solved is gone. What remains is the cost: an ORM is a dependency you upgrade, audit, and debug, and it adds a layer between you and the database that hides the actual query plan. D1 with prepared statements is explicit and zero-dependency. You see the exact SQL that runs.",
-    },
-    {
-        q: "Why PBKDF2 and not argon2?",
-        a: "Workers doesn't have native argon2. PBKDF2 via Web Crypto (crypto.subtle) is zero-dependency and runs natively in the Workers runtime. Workers caps PBKDF2 at 100K iterations (OWASP recommends 600K, which throws NotSupportedError) — 100K is still OWASP-acceptable for PBKDF2-HMAC-SHA256.",
     },
     {
         q: "Is it production-ready?",
@@ -38,7 +30,7 @@ const faqs: { q: string; a: string }[] = [
 <section class="dl-faq">
     <div class="dl-faq-cta">
         <h2 class="dl-section-title">Start in one command.</h2>
-        <div class="dl-cta-cmd">bun create kilat@latest</div>
+        <div class="dl-cta-cmd">npm create kilat@latest</div>
         <div class="dl-cta-actions">
             <a class="dl-cta-btn" href="/getting-started/introduction/"
                 >Get started</a

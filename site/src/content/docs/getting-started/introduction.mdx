@@ -8,6 +8,18 @@ The Indonesian word for *lightning* — and the name is the promise: code that
 runs fast, deploys fast, and is understood fast. No Docker, no VPS, no reverse
 proxy. `wrangler deploy` and you're live on 300+ edge locations.
 
+**Free to start.** 100K requests/day, 500 MB D1 database, 20K static assets —
+all on Cloudflare's free tier. No credit card, no server to rent, no database
+to provision. See the full [free tier limits](/limits/).
+
+Outgrew the free tier? [Dulak](https://dulak.pages.dev) is Kilat's sister
+project — same stack, same templates, but runs on Bun + bun:sqlite with
+**zero platform limits**. Deploy with a single `docker compose up` on any
+free-tier VPS (Oracle Cloud, Fly.io, Railway). No request caps, no CPU time
+ceilings, no database size limits. See the
+[migration guide](/blog/migrating-to-dulak/) — there's even a copy-paste
+prompt for your AI agent to do it automatically.
+
 ## The stack
 
 | Layer | Choice | Why |
@@ -19,10 +31,12 @@ proxy. `wrangler deploy` and you're live on 300+ edge locations.
 | Build | esbuild | Client bundle + content-hashed assets |
 | Deploy | Wrangler | `wrangler deploy` — that's it |
 | Password hashing | PBKDF2 via Web Crypto | 100K iterations (Workers cap) |
-| Package manager | Bun >= 1.3 | Install + scripts only (not the runtime) |
+| Package manager | Bun >= 1.3 (recommended) or npm | Install + scripts only (not the runtime) |
 
-**Bun is the package manager and script runner — the app does NOT run on Bun.**
-It runs on the Workers runtime via Wrangler/Miniflare.
+**Bun is the recommended package manager and script runner — the app does NOT
+run on Bun.** It runs on the Workers runtime via Wrangler/Miniflare. `npm
+install` works for installing deps, but `bun:test` and build scripts require
+Bun. [Install Bun](https://bun.sh).
 
 ## What's included
 
@@ -49,8 +63,11 @@ What's missing is your business logic — and that's the point.
 ## Quick start
 
 ```bash
-bun create kilat@latest my-app
+npm create kilat@latest my-app
 ```
+
+Have [Bun](https://bun.sh)? `bun create kilat@latest my-app` is faster —
+Bun installs deps in seconds and runs the test suite and build scripts.
 
 The interactive prompt lets you pick a **framework** (React 19, Svelte 5,
 Vue 3) and a **styling** approach (vanilla CSS or Tailwind CSS v4) via
@@ -80,9 +97,9 @@ Six template variants — pick one via the scaffolder:
 Skip the prompts:
 
 ```bash
-bun create kilat my-app --template svelte-tailwind
-bun create kilat .                  # use current dir
-bun create kilat my-app --no-install
+npm create kilat my-app --template svelte-tailwind
+npm create kilat .                  # use current dir
+npm create kilat my-app --no-install
 ```
 
 ## Next steps

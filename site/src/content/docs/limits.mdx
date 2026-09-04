@@ -1,0 +1,168 @@
+---
+title: Limits
+description: Cloudflare Workers, D1, and R2 free plan limits, and when to consider upgrading.
+---
+
+Kilat runs entirely on **Cloudflare Workers**, **D1**, and **R2**. The free
+tier is generous enough for development, staging, and small production apps —
+but it has hard limits you should know about before scaling.
+
+## Workers Free plan limits
+
+| Limit | Free | Paid |
+| --- | --- | --- |
+| Requests | 100,000 / day | Unlimited |
+| CPU time per request | 10 ms | 5 min (default 30 s) |
+| Memory per isolate | 128 MB | 128 MB |
+| Subrequests per invocation | 50 | 10,000 |
+| Simultaneous open connections | 6 | 6 |
+| Environment variables | 64 / Worker | 128 / Worker |
+| Worker size (compressed) | 3 MB | 10 MB |
+| Worker startup time | 1 second | 1 second |
+| Number of Workers | 100 | 500 |
+| Cron Triggers per account | 5 | 250 |
+| Static Asset files | 20,000 | 100,000 |
+
+### CPU time — the one to watch
+
+CPU time measures only **code execution** — waiting on `fetch()`, D1 queries,
+or KV reads does **not** count. The average Worker uses ~2.2 ms per request.
+SSR + auth typically uses 10–20 ms, which is **double the free limit**.
+
+If your Worker hits the CPU limit, Cloudflare returns `Error 1102` and
+terminates the request. On the Paid plan you can raise it up to 5 minutes:
+
+```toml
+# wrangler.toml
+[limits]
+cpu_ms = 300_000
+```
+
+### Daily requests
+
+The 100,000 daily request limit resets at midnight UTC. When exceeded,
+Cloudflare returns `Error 1027`. You can configure fail behavior:
+
+- **Fail open** — bypasses the Worker, requests proceed without your app
+- **Fail closed** — returns a 1027 error page (use for security-critical Workers)
+
+## D1 Free plan limits
+
+| Limit | Free | Paid |
+| --- | --- | --- |
+| Databases per account | 10 | 50,000 |
+| Maximum database size | 500 MB | 10 GB |
+| Storage per account | 5 GB | 1 TB |
+| Queries per Worker invocation | 50 | 1,000 |
+| Time Travel (point-in-time recovery) | 7 days | 30 days |
+| Maximum row size | 2 MB | 2 MB |
+| Maximum SQL statement length | 100 KB | 100 KB |
+| Maximum query duration | 30 seconds | 30 seconds |
+
+### D1 concurrency
+
+Each D1 database is single-threaded — queries process one at a time.
+Throughput depends on query speed:
+
+- **1 ms average query** → ~1,000 queries/second
+- **100 ms average query** → ~10 queries/second
+
+Use appropriate indexes to keep queries fast. Large `UPDATE` or `DELETE`
+operations must be batched (e.g. 1,000 rows at a time) to avoid exceeding
+execution limits.
+
+For high-traffic deployments where session lookups become the bottleneck,
+enable [KV session caching](/auth/sessions-guards/#session-caching-optional-kv-backed)
+to serve cached sessions from KV (~0 D1 queries on hit) instead of D1.
+
+## R2 Free plan limits
+
+Kilat stores user avatars in **R2**. The free tier covers avatar storage for
+most apps:
+
+| Limit | Free |
+| --- | --- |
+| Storage | 10 GB |
+| Class A operations (writes, lists) | 10 million / month |
+| Class B operations (reads) | 10 million / month |
+
+R2 has **no egress fees** — serving avatars from R2 costs nothing in
+bandwidth, unlike S3 or other object stores.
+
+## Will Kilat fit in the free tier?
+
+| Use case | Fits free? | Why |
+| --- | --- | --- |
+| Development & testing | ✅ | Low traffic, no CPU pressure |
+| Staging / preview | ✅ | Internal traffic, well under 100K/day |
+| Small production (< 1K visits/day) | ⚠️ | CPU time is the risk — SSR + auth can hit 10 ms |
+| Production with SSR | ❌ | SSR alone often exceeds 10 ms CPU limit |
+| API-only (no SSR) | ✅ | JSON responses use ~2–3 ms CPU |
+| High-traffic production | ❌ | 100K requests/day limit |
+
+## When you outgrow the free tier
+
+The Cloudflare Workers free plan is generous for development and small apps,
+but production traffic with SSR will hit the 10 ms CPU limit fast. When that
+happens, you have two paths:
+
+### Stay on Cloudflare — Workers Paid ($5/month)
+
+The simplest upgrade if you want to stay on the edge:
+
+- **Unlimited daily requests** — no more 100K/day cap
+- **CPU time up to 5 min** — SSR + auth + heavy computation without limits
+- **D1 storage up to 10 GB** — 20x the free tier
+- **50,000 D1 databases** per account
+
+```toml
+# wrangler.toml — raise CPU limit on Paid plan
+[limits]
+cpu_ms = 300_000
+```
+
+Don't want to deal with Wrangler? See
+[AI agent deployment](/deployment/ai-agent/) for copy-paste prompts that
+handle the upgrade for you.
+
+:::tip[Need even higher limits?]
+Cloudflare offers a [Limit Increase Request Form](https://forms.gle/eX6pXvit1wBv77Yw5)
+for accounts that need adjustments beyond the Paid plan defaults.
+:::
+
+### Move to self-hosted — [Dulak](https://dulak.pages.dev)
+
+If Cloudflare's platform limits become a constraint, consider
+[**Dulak**](https://dulak.pages.dev) — Kilat's sister project. Same
+philosophy (deliberately boring, one obvious way to do things), same stack
+(Hono + Inertia v3 + SSR, React/Svelte/Vue templates), but runs entirely on
+**Bun + bun:sqlite** — no platform limits, no request caps, no CPU time
+ceilings.
+
+| | Kilat | Dulak |
+ | --- | --- | --- |
+| Runtime | Cloudflare Workers | Bun |
+| Database | D1 (SQLite at edge) | bun:sqlite (local) |
+| Request limit | 100K/day (free) / unlimited (paid) | Unlimited |
+| CPU time limit | 10 ms (free) / 5 min (paid) | Unlimited |
+| Database size | 500 MB (free) / 10 GB (paid) | Unlimited (disk-bound) |
+| Deploy | `wrangler deploy` | Docker / VPS / any Node host |
+| Rate limiting | KV-backed fixed-window | In-memory fixed-window |
+| Password hashing | PBKDF2 (100K iterations, Web Crypto) | argon2id (Bun.password) |
+| Uploads | R2 avatar storage built-in | tus resumable uploads built-in |
+
+Dulak gives you full control: deploy via Docker on any VPS, no vendor
+lock-in, no platform quotas. The trade-off is you manage your own server
+(or container) instead of letting Cloudflare handle distribution.
+
+Ready to move? The
+[Migrating from Kilat to Dulak](/blog/migrating-to-dulak/) guide walks
+through every step — and includes a copy-paste prompt you can give your
+AI agent to automate the whole migration.
+
+## Sources
+
+- [Cloudflare Workers limits](https://developers.cloudflare.com/workers/platform/limits/)
+- [Cloudflare D1 limits](https://developers.cloudflare.com/d1/platform/limits/)
+- [Cloudflare R2 limits](https://developers.cloudflare.com/r2/platform/limits/)
+- [Dulak — self-hosted alternative on Bun](https://dulak.pages.dev)

@@ -1,6 +1,6 @@
 ---
 title: Configuration
-description: wrangler.toml vars, secrets, D1 binding, and the nodejs_compat flag.
+description: wrangler.toml vars, secrets, D1, R2, KV bindings, environments, and the nodejs_compat flag.
 ---
 
 Kilat is configured through `wrangler.toml` and Wrangler secrets. There is no
@@ -15,16 +15,29 @@ main = "src/worker.ts"
 compatibility_date = "2025-07-01"
 compatibility_flags = ["nodejs_compat"]
 
+[observability]
+enabled = true
+head_sampling_rate = 1
+
 [vars]
 NODE_ENV = "development"
 SSR = "true"
 MAIL_DRIVER = "log"
 MAIL_FROM = "no-reply@example.com"
 
+[[kv_namespaces]]
+binding = "RATE_LIMIT_KV"
+id = "YOUR_KV_NAMESPACE_ID"
+
 [[d1_databases]]
 binding = "DB"
 database_id = "YOUR_D1_DATABASE_ID"
+database_name = "kilat"
 migrations_dir = "migrations"
+
+[[r2_buckets]]
+binding = "AVATARS"
+bucket_name = "kilat-avatars"
 
 [assets]
 directory = "./dist"
@@ -42,8 +55,10 @@ per-request by `initConfig(env)` in `src/server/config.ts`.
 | ------------- | ---------------------------------------------------- | ------------------------------ |
 | `NODE_ENV`    | `production` enables `secure` cookies                | —                              |
 | `SSR`         | `false` disables server-side rendering (client-only) | `true`                         |
-| `MAIL_DRIVER` | `log` \| `resend` \| `mailtrap`                      | `log`                          |
+| `MAIL_DRIVER` | `log` \| `resend` \| `mailtrap` — see [Mailer](/architecture/mailer/) | `log` |
 | `MAIL_FROM`   | From address for outgoing email                      | `no-reply@example.com`         |
+| `SESSION_CACHE_ENABLED` | `true` enables KV session caching (requires `SESSION_KV`) | `false` |
+| `SESSION_CACHE_TTL_SECONDS` | KV session cache TTL in seconds              | `300`                          |
 
 Adding a config key means updating **three places**: `config.ts` (the `EnvVars`
 interface + `initConfig`), `wrangler.toml` `[vars]`, and the README env table.
@@ -73,6 +88,62 @@ them identically. `config.ts` validates relationships (e.g.
 `MAIL_DRIVER=resend` requires `RESEND_API_KEY`; Google ID and secret must be set
 together).
 
+## KV binding (rate limiting)
+
+```toml
+[[kv_namespaces]]
+binding = "RATE_LIMIT_KV"
+id = "YOUR_KV_NAMESPACE_ID"
+```
+
+The rate limiter (`src/server/rate-limit.ts`) is KV-backed. `binding =
+"RATE_LIMIT_KV"` exposes the namespace as `env.RATE_LIMIT_KV` in the Worker,
+where counters are read and incremented per request. Create the namespace once
+per project and paste its id:
+
+```sh
+npx wrangler kv namespace create RATE_LIMIT_KV
+```
+
+Local dev (`wrangler dev --local`) simulates the namespace via Miniflare, so any
+placeholder id works. **Without the binding the limiter fails OPEN** — requests
+pass through unthrottled — so keep this binding in your production
+`wrangler.toml`. Optional tuning vars (`RATE_LIMIT_GLOBAL_MAX`,
+`RATE_LIMIT_GLOBAL_WINDOW`, `RATE_LIMIT_AUTH_MAX`, `RATE_LIMIT_AUTH_WINDOW`) override the defaults of 200 req/60s global and
+30 req/60s auth.
+
+## KV binding (session caching, optional)
+
+```toml
+[[kv_namespaces]]
+binding = "SESSION_KV"
+id = "YOUR_SESSION_KV_NAMESPACE_ID"
+```
+
+Session caching is **off by default** — every request resolves the session from
+D1 (2 queries). Enable it for high-traffic deployments where D1's
+single-threaded ~1K QPS limit becomes a bottleneck:
+
+```toml
+[vars]
+SESSION_CACHE_ENABLED = "true"
+SESSION_CACHE_TTL_SECONDS = "300"
+```
+
+`resolveSession` checks KV first (`session:{hash}` key). On a hit, it returns
+the cached user + flash with zero D1 queries. On a miss, it falls back to D1
+and populates KV. Logout and flash consumption invalidate the KV entry. D1
+remains the source of truth. See [Sessions & guards](/auth/sessions-guards/)
+for the full pattern and security trade-offs.
+
+```sh
+npx wrangler kv namespace create SESSION_KV
+```
+
+Local dev simulates the namespace via Miniflare. Without the binding,
+`initSessionCache` receives `undefined` and all cache operations are no-ops —
+`resolveSession` falls back to D1-only.
+
 ## D1 binding
 
 ```toml
@@ -87,6 +158,28 @@ migrations_dir = "migrations"
 `initDb(env.DB)` runs per-request in `src/worker.ts` to set the module-level
 `d1` reference used by `db.ts`. All queries are async:
 `await env.DB.prepare(sql).bind(...).first()`.
+
+## R2 binding (file uploads)
+
+```toml
+[[r2_buckets]]
+binding = "AVATARS"
+bucket_name = "kilat-avatars"
+```
+
+File uploads stream to R2 via multipart form-data. `binding = "AVATARS"`
+exposes the bucket as `env.AVATARS` in the Worker. Create the bucket once
+per project:
+
+```sh
+npx wrangler r2 bucket create kilat-avatars
+```
+
+Uploaded files are served from `/avatars/*` via `avatars.routes.ts`, with
+edge caching. Local dev (`wrangler dev --local`) simulates the binding via
+Miniflare. See [File uploads](/architecture/file-uploads/) for the full
+pattern — key structure, security, graceful degradation, and adding new
+upload types.
 
 ## ASSETS binding
 
@@ -112,3 +205,100 @@ Enables a subset of Node.js APIs on Workers. However, **prefer the Web Crypto
 API** (`crypto.subtle`, `crypto.getRandomValues`, `crypto.randomUUID`) for
 crypto operations — `node:crypto` is not available. `nodejs_compat` is mainly
 for libraries that expect Node globals.
+
+## Environments
+
+The base config above is the local-dev default. Named environments override
+only the fields that differ; each environment needs its own remote IDs for
+KV, D1, and R2.
+
+```toml
+[env.staging]
+name = "kilat-staging"
+
+[env.staging.vars]
+NODE_ENV = "production"
+SSR = "true"
+MAIL_DRIVER = "log"
+MAIL_FROM = "no-reply@staging.example.com"
+
+[env.staging.observability]
+enabled = true
+head_sampling_rate = 1
+
+[[env.staging.kv_namespaces]]
+binding = "RATE_LIMIT_KV"
+id = "YOUR_STAGING_KV_ID"
+
+[[env.staging.kv_namespaces]]
+binding = "SESSION_KV"
+id = "YOUR_STAGING_SESSION_KV_ID"
+
+[[env.staging.d1_databases]]
+binding = "DB"
+database_id = "YOUR_STAGING_D1_ID"
+database_name = "kilat-staging"
+migrations_dir = "migrations"
+
+[[env.staging.r2_buckets]]
+binding = "AVATARS"
+bucket_name = "kilat-avatars-staging"
+
+[env.production]
+name = "kilat"
+
+[env.production.vars]
+NODE_ENV = "production"
+SSR = "true"
+MAIL_DRIVER = "resend"
+MAIL_FROM = "no-reply@example.com"
+
+[env.production.observability]
+enabled = true
+head_sampling_rate = 0.1
+
+[[env.production.kv_namespaces]]
+binding = "RATE_LIMIT_KV"
+id = "YOUR_PRODUCTION_KV_ID"
+
+[[env.production.kv_namespaces]]
+binding = "SESSION_KV"
+id = "YOUR_PRODUCTION_SESSION_KV_ID"
+
+[[env.production.d1_databases]]
+binding = "DB"
+database_id = "YOUR_PRODUCTION_D1_ID"
+database_name = "kilat-production"
+migrations_dir = "migrations"
+
+[[env.production.r2_buckets]]
+binding = "AVATARS"
+bucket_name = "kilat-avatars-production"
+```
+
+Deploy to a specific environment:
+
+```sh
+wrangler deploy --env staging
+wrangler deploy --env production
+```
+
+Secrets are also per-environment:
+
+```sh
+wrangler secret put RESEND_API_KEY --env production
+```
+
+Production samples 10% of requests (`head_sampling_rate = 0.1`) versus staging's
+100% (`1`). Create the per-environment bindings before first deploy:
+
+```sh
+npx wrangler kv namespace create RATE_LIMIT_KV --env staging
+npx wrangler d1 create kilat-staging
+npx wrangler r2 bucket create kilat-avatars-staging
+npx wrangler kv namespace create SESSION_KV --env staging
+
+npx wrangler kv namespace create RATE_LIMIT_KV --env production
+npx wrangler r2 bucket create kilat-avatars-production
+npx wrangler kv namespace create SESSION_KV --env production
+```

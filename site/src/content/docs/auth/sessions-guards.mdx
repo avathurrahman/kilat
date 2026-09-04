@@ -1,6 +1,6 @@
 ---
 title: Sessions & guards
-description: PBKDF2 password hashing, DB-backed sessions, and route guards in Kilat.
+description: PBKDF2 password hashing, DB-backed sessions, optional KV session cache, and route guards in Kilat.
 ---
 
 Kilat ships a complete auth layer in `src/server/auth.ts` — password hashing via
@@ -43,9 +43,14 @@ Sessions live in the `sessions` D1 table, not in signed cookies or JWTs.
 
 ```ts
 export async function createSession(userId: number): Promise<SessionInfo> { /* … */ }
-export async function resolveUser(token: string | null | undefined): Promise<UserRow | null> { /* … */ }
+export async function resolveSession(token: string | null | undefined): Promise<ResolvedSession | null> { /* … */ }
 export async function deleteSessionByToken(token: string): Promise<void> { /* … */ }
 ```
+
+`resolveSession` is the single entry point used by the Inertia middleware. It
+returns both the public user and one-shot flash data in one call — **2 D1
+queries** (`findSession` + `findUserById`), down from the previous 3 (which
+read the session row twice).
 
 ### Cookie attributes
 
@@ -71,6 +76,48 @@ export const SESSION_TTL_MS = 30 * 24 * 60 * 60 * 1000; // 30 days
 One-shot flash messages (e.g. "Welcome back!") are stored as JSON on the
 session row and consumed on the next render via `readFlash` / `setFlash` /
 `clearFlash`.
+
+### Session caching (optional, KV-backed)
+
+By default, every request resolves the session from D1 via `resolveSession` —
+2 D1 queries per request. This is correct and simple, but D1 is single-threaded
+per database — throughput caps at ~1,000 QPS for sub-millisecond queries. At
+thousands of RPS, session lookups become the bottleneck.
+
+Enable KV-backed session caching to eliminate D1 queries on cache hits:
+
+```toml
+# wrangler.toml
+[vars]
+SESSION_CACHE_ENABLED = "true"
+SESSION_CACHE_TTL_SECONDS = "300"
+
+[[kv_namespaces]]
+binding = "SESSION_KV"
+id = "your-session-kv-namespace-id"
+```
+
+**How it works**: `resolveSession` checks KV first (`session:{hash}` key). On a
+hit, it returns the cached user + flash with **zero D1 queries**. On a miss, it
+falls back to D1, then populates KV with the session data and TTL. Logout
+(`deleteSessionByToken`) and flash consumption (`clearFlash`) invalidate the KV
+entry. D1 remains the source of truth.
+
+| Scenario | D1 queries | KV ops | Notes |
+| --- | --- | --- | --- |
+| Cache disabled (default) | 2 | 0 | Every request hits D1 |
+| Cache hit | 0 | 1 get | ~99% of requests for active users |
+| Cache miss (first request per session) | 2 | 1 get + 1 put | Populates cache for subsequent hits |
+
+**Security trade-off**: `deleteOtherSessionsByToken` (password change) cannot
+enumerate other sessions' KV keys — revoked sessions on other devices may
+remain cache-valid for up to `SESSION_CACHE_TTL_SECONDS` (default 300s). Reduce
+the TTL or disable the cache if this revocation window is unacceptable.
+
+The cache is **off by default** and degrades gracefully: without the `SESSION_KV`
+binding (tests, local dev), `initSessionCache` receives `undefined` and all
+cache operations are no-ops — `resolveSession` falls back to D1-only. See
+[Limits](/limits/) for D1 throughput details.
 
 ## Route guards
 

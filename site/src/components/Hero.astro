@@ -17,8 +17,8 @@
     </div>
 
     <h1 class="dl-title">
-      Edge-native. <span class="dl-accent">Zero ops.</span><br />
-      A full-stack starter that runs at the speed of light.
+      Free to start. <span class="dl-accent">Zero ops.</span><br />
+      A full-stack starter on Cloudflare Workers.
     </h1>
 
     <p class="dl-tagline">
@@ -55,6 +55,10 @@
       </div>
     </div>
 
+    <p class="dl-alt-cmd">
+      Have <a href="https://bun.sh">Bun</a>? <code>bun create kilat@latest my-app</code> is faster.
+    </p>
+
     <div class="dl-chips">
       <span>Workers</span><span>Hono</span><span>Inertia v3</span><span>D1</span><span>Web Crypto</span>
     </div>
@@ -65,7 +69,7 @@
   const el = document.getElementById("dl-typing");
   const cursor = document.getElementById("dl-cursor");
   if (el && cursor) {
-    const text = "bun create kilat@latest my-app";
+    const text = "npm create kilat@latest my-app";
     let i = 0;
     const tick = () => {
       if (i <= text.length) {
@@ -274,5 +278,25 @@
     border-radius: 0.4rem;
     padding: 0.25rem 0.7rem;
     background: #0f141a;
+  }
+  .dl-alt-cmd {
+    margin: 0 0 1.5rem;
+    font-size: 0.85rem;
+    color: #8b95a5;
+  }
+  .dl-alt-cmd code {
+    color: #c2cdd9;
+    background: #0f141a;
+    border: 1px solid #1f2937;
+    border-radius: 0.3rem;
+    padding: 0.1rem 0.4rem;
+    font-size: 0.8rem;
+  }
+  .dl-alt-cmd a {
+    color: #059669;
+    text-decoration: none;
+  }
+  .dl-alt-cmd a:hover {
+    text-decoration: underline;
   }
 </style>

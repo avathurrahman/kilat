@@ -21,6 +21,12 @@ export interface EnvVars {
   MAILTRAP_INBOX_ID?: string;
   GOOGLE_CLIENT_ID?: string;
   GOOGLE_CLIENT_SECRET?: string;
+  RATE_LIMIT_GLOBAL_MAX?: string;
+  RATE_LIMIT_GLOBAL_WINDOW?: string;
+  RATE_LIMIT_AUTH_MAX?: string;
+  RATE_LIMIT_AUTH_WINDOW?: string;
+  SESSION_CACHE_ENABLED?: string;
+  SESSION_CACHE_TTL_SECONDS?: string;
 }
 
 const pick = <T>(value: T | undefined, fallback: T): T =>
@@ -41,6 +47,24 @@ export const config = {
   google: {
     clientId: null as string | null,
     clientSecret: null as string | null,
+  },
+  rateLimit: {
+    /** Baseline DDoS protection — all routes except /health, /assets, /.well-known. */
+    globalMax: 200,
+    globalWindow: 60,
+    /** Stricter layer on auth endpoints (brute-force protection). */
+    authMax: 30,
+    authWindow: 60,
+  },
+  sessionCache: {
+    /** Off by default — D1-only session resolution. Enable for high-traffic
+     *  deployments (thousands of RPS) where D1's single-threaded ~1K QPS limit
+     *  becomes a bottleneck. Requires a SESSION_KV KV namespace binding. */
+    enabled: false,
+    /** KV entry TTL in seconds. Lower = faster revocation propagation but
+     *  more cache misses. Default 300s (5 min) balances hit rate vs the
+     *  revocation window for `deleteOtherSessionsByToken`. */
+    ttlSeconds: 300,
   },
 };
 
@@ -86,5 +110,15 @@ export function initConfig(env: EnvVars): void {
   config.google = {
     clientId: googleClientId || null,
     clientSecret: googleClientSecret || null,
+  };
+  config.rateLimit = {
+    globalMax: Number(pick(env.RATE_LIMIT_GLOBAL_MAX, "200")),
+    globalWindow: Number(pick(env.RATE_LIMIT_GLOBAL_WINDOW, "60")),
+    authMax: Number(pick(env.RATE_LIMIT_AUTH_MAX, "30")),
+    authWindow: Number(pick(env.RATE_LIMIT_AUTH_WINDOW, "60")),
+  };
+  config.sessionCache = {
+    enabled: env.SESSION_CACHE_ENABLED === "true",
+    ttlSeconds: Number(pick(env.SESSION_CACHE_TTL_SECONDS, "300")),
   };
 }

@@ -1,0 +1,52 @@
+---
+title: AI agent deployment
+description: Copy-paste this prompt to your AI agent — it will deploy your app for you.
+---
+
+Don't want to memorize Wrangler commands? Copy-paste the prompt below into
+your AI agent (Cursor, Claude, etc.) and it will handle everything.
+
+## First deploy
+
+```
+Deploy my app to Cloudflare Workers.
+
+Steps:
+1. Run `bun run build` to build client assets
+2. Run `wrangler d1 migrations apply <database-name> --remote` to apply database migrations
+   (read the database name from wrangler.toml)
+3. Run `wrangler deploy` to deploy the Worker
+4. Curl the health endpoint to verify it's live
+5. Tell me the production URL
+```
+
+## Set secrets
+
+```
+Set these production secrets for my app on Cloudflare Workers:
+- NODE_ENV = production
+- RESEND_API_KEY (I'll provide the value)
+- GOOGLE_CLIENT_ID (I'll provide the value)
+- GOOGLE_CLIENT_SECRET (I'll provide the value)
+
+Use `wrangler secret put` for each. Ask me for the values before running the commands.
+```
+
+## Update an existing deployment
+
+```
+Deploy the latest code to my app on Cloudflare Workers.
+Build, apply any new migrations, then deploy. Verify it's live after.
+```
+
+## Download production data to local
+
+```
+Export my production D1 database to a local SQL file and import it into my local D1.
+Read the database name from wrangler.toml, then use
+`wrangler d1 execute <database-name> --remote --export ./backup.sql` and
+`wrangler d1 execute <database-name> --local --file ./backup.sql`.
+```
+
+That's it. Your AI agent reads these prompts, runs the commands, and tells
+you the result. You never touch Wrangler directly.

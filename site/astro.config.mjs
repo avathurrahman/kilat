@@ -65,12 +65,17 @@ export default defineConfig({
               label: "Request lifecycle",
               slug: "architecture/request-lifecycle",
             },
+            { label: "Inertia.js", slug: "architecture/inertia" },
+            { label: "Rate limiting", slug: "architecture/rate-limiting" },
+            { label: "File uploads", slug: "architecture/file-uploads" },
+            { label: "Mailer", slug: "architecture/mailer" },
           ],
         },
         {
           label: "Auth",
           items: [
             { label: "Sessions & guards", slug: "auth/sessions-guards" },
+            { label: "Email verification", slug: "auth/email-verification" },
             { label: "Google OAuth", slug: "auth/google-oauth" },
             { label: "Password reset", slug: "auth/password-reset" },
           ],
@@ -81,6 +86,7 @@ export default defineConfig({
             { label: "Overview", slug: "deployment" },
             { label: "Configuration", slug: "deployment/configuration" },
             { label: "Custom domain", slug: "deployment/custom-domain" },
+            { label: "AI agent deployment", slug: "deployment/ai-agent" },
           ],
         },
         {
@@ -90,6 +96,7 @@ export default defineConfig({
             { label: "Local development", slug: "database/local-development" },
           ],
         },
+        { label: "Limits", slug: "limits" },
         { label: "Testing", slug: "testing" },
         {
           label: "Extending",

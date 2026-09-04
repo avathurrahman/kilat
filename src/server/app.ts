@@ -3,15 +3,16 @@
  * Inertia middleware → routes → onError/notFound.
  *
  * Workers-specific changes:
- *  - No /uploads routes (upload feature skipped in CF experiment).
+ *  - Avatar uploads stream to R2 (AVATARS binding); served from /avatars/*.
  *  - No /assets/* handler (Workers Static Assets binding serves directly).
  *  - /health uses async pingDb (D1).
- *  - Rate limiter is a no-op stub (see rate-limit.ts).
+ *  - Rate limiter is KV-backed (see rate-limit.ts).
  */
 import { getCookie } from "hono/cookie";
 import { Hono } from "hono";
 import { HTTPException } from "hono/http-exception";
 import { secureHeaders } from "hono/secure-headers";
+import { config } from "./config";
 import { rateLimit } from "./rate-limit";
 import { SESSION_COOKIE } from "./auth";
 import { pingDb } from "./db";
@@ -19,6 +20,7 @@ import { Inertia, type InertiaAssets } from "./inertia";
 import { inertiaMiddleware, type AppEnv } from "./inertia-middleware";
 import { logError, requestLogger } from "./logger";
 import { authRoutes, VALIDATION_MESSAGES } from "./routes/auth.routes";
+import { avatarRoutes } from "./routes/avatars.routes";
 import { googleOauthRoutes } from "./routes/google-oauth.routes";
 import { pageRoutes } from "./routes/pages.routes";
 import {
@@ -58,9 +60,9 @@ function inertiaFromContext(
   if (existing) return existing;
   const raw = getCookie(c, SESSION_COOKIE);
   const sessionToken = typeof raw === "string" && raw.length > 0 ? raw : null;
-  // Fallback path: resolveUser/readFlash are async, but this branch is
-  // exotic (inertiaMiddleware didn't run). We pass null user + empty flash
-  // — the real middleware always populates c.var.inertia.
+  // Fallback path: this branch is exotic (inertiaMiddleware didn't run).
+  // We pass null user + empty flash — the real middleware always populates
+  // c.var.inertia via resolveSession.
   return new Inertia(
     {
       request: c.req.raw,
@@ -68,6 +70,7 @@ function inertiaFromContext(
       user: null,
       flash: {},
       sessionToken,
+      cspNonce: c.get("cspNonce") ?? "",
     },
     assets,
   );
@@ -85,26 +88,41 @@ export function createApp(assets: InertiaAssets) {
       xFrameOptions: "DENY",
       referrerPolicy: "strict-origin-when-cross-origin",
       permissionsPolicy: { camera: [], microphone: [], geolocation: [] },
-      // script-src/style-src 'unsafe-inline': Inertia embeds the page
-      // payload as an inline <script type="application/json"> plus the
-      // theme-boot script, and the progress bar injects inline styles.
-      contentSecurityPolicy: {
-        defaultSrc: ["'self'"],
-        scriptSrc: ["'self'", "'unsafe-inline'"],
-        styleSrc: ["'self'", "'unsafe-inline'"],
-        imgSrc: ["'self'", "data:"],
-        fontSrc: ["'self'"],
-        connectSrc: ["'self'"],
-        frameAncestors: ["'none'"],
-        baseUri: ["'self'"],
-        formAction: ["'self'"],
-      },
+      // CSP is set per-request below (needs the per-request nonce from
+      // inertiaMiddleware) — not here, where it would be static.
     }),
   );
   app.use(inertiaMiddleware(assets));
-  // Rate limiter is a no-op stub for the CF experiment.
-  const globalLimiter = rateLimit({ max: 0, windowSeconds: 0 });
-  const EXEMPT_PREFIXES = ["/assets/", "/.well-known/"] as const;
+  // Per-request CSP with nonce — must run after inertiaMiddleware (which
+  // generates the nonce). Inline scripts (theme boot, page payload) and
+  // inline styles (Inertia progress bar) carry the nonce; 'unsafe-inline'
+  // is no longer needed.
+  app.use(async (c, next) => {
+    await next();
+    const nonce = c.get("cspNonce");
+    const csp = [
+      `default-src 'self'`,
+      `script-src 'self' 'nonce-${nonce}'`,
+      `style-src 'self' 'nonce-${nonce}'`,
+      `img-src 'self' data:`,
+      `font-src 'self'`,
+      `connect-src 'self'`,
+      `frame-ancestors 'none'`,
+      `base-uri 'self'`,
+      `form-action 'self'`,
+    ].join("; ");
+    c.res.headers.set("content-security-policy", csp);
+  });
+  // Global rate limit (DDoS baseline) — applied to all routes except
+  // /health (orchestrator probes), /assets/* (bulk browser fetches), and
+  // /.well-known/* (DevTools probes). Auth endpoints get a stricter layer
+  // on top (see auth.routes.ts). KV-backed (see rate-limit.ts).
+  const globalLimiter = rateLimit({
+    max: config.rateLimit.globalMax,
+    windowSeconds: config.rateLimit.globalWindow,
+    scope: "global",
+  });
+  const EXEMPT_PREFIXES = ["/assets/", "/.well-known/", "/avatars/"] as const;
   app.use((c, next) => {
     const pathname = safeUrl(c.req.url).pathname;
     if (
@@ -154,6 +172,7 @@ export function createApp(assets: InertiaAssets) {
   app.get("/.well-known/*", () => new Response(null, { status: 404 }));
 
   app.route("/", authRoutes());
+  app.route("/", avatarRoutes());
   app.route("/", googleOauthRoutes());
   app.route("/", pageRoutes());
   app.route("/", profileRoutes());

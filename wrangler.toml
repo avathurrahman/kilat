@@ -3,11 +3,45 @@ main = "src/worker.ts"
 compatibility_date = "2025-07-01"
 compatibility_flags = ["nodejs_compat"]
 
+[observability]
+enabled = true
+head_sampling_rate = 1
+
 [vars]
 NODE_ENV = "development"
 SSR = "true"
 MAIL_DRIVER = "log"
 MAIL_FROM = "no-reply@example.com"
+
+# --- Rate limiting (KV-backed, secure by default) ---------------------------
+# Create the namespace once per project, then paste its id below:
+#   npx wrangler kv namespace create RATE_LIMIT_KV
+# Local dev (wrangler dev --local) works with any placeholder id — Miniflare
+# simulates the namespace. Without the binding the limiter fails OPEN, so
+# keep this binding in your production wrangler.toml.
+[[kv_namespaces]]
+binding = "RATE_LIMIT_KV"
+id = "YOUR_KV_NAMESPACE_ID"
+
+# Optional tuning (defaults: global 200 req/60s, auth 30 req/60s):
+# RATE_LIMIT_GLOBAL_MAX = "200"
+# RATE_LIMIT_GLOBAL_WINDOW = "60"
+# RATE_LIMIT_AUTH_MAX = "30"
+# RATE_LIMIT_AUTH_WINDOW = "60"
+
+# --- Session cache (KV-backed, optional — for high-traffic deployments) -----
+# Off by default. Enable when D1's single-threaded ~1K QPS limit becomes a
+# bottleneck (thousands of RPS). Requires a SESSION_KV KV namespace binding.
+# Create the namespace:
+#   npx wrangler kv namespace create SESSION_KV
+# Local dev (wrangler dev --local) works with any placeholder id — Miniflare
+# simulates the namespace. Without the binding, session resolution falls back
+# to D1-only (no error).
+# SESSION_CACHE_ENABLED = "true"
+# SESSION_CACHE_TTL_SECONDS = "300"
+[[kv_namespaces]]
+binding = "SESSION_KV"
+id = "YOUR_SESSION_KV_NAMESPACE_ID"
 
 [[d1_databases]]
 binding = "DB"
@@ -15,8 +49,95 @@ database_id = "YOUR_D1_DATABASE_ID"
 database_name = "kilat"
 migrations_dir = "migrations"
 
+# --- R2 avatar storage -------------------------------------------------------
+# Create the bucket once per project:
+#   npx wrangler r2 bucket create kilat-avatars
+# Local dev (wrangler dev --local) simulates the binding via Miniflare.
+[[r2_buckets]]
+binding = "AVATARS"
+bucket_name = "kilat-avatars"
+
 [assets]
 directory = "./dist"
 binding = "ASSETS"
 not_found_handling = "none"
 run_worker_first = ["/*", "!/assets/*"]
+
+# --- Environments ------------------------------------------------------------
+# Deploy:  wrangler deploy --env staging    (or --env production)
+# Secrets: wrangler secret put RESEND_API_KEY --env production
+#
+# The base config above is the local-dev default. Each named environment
+# overrides only the fields that differ; bindings inherit the base names
+# but need their own remote IDs (create them per environment):
+#   npx wrangler kv namespace create RATE_LIMIT_KV --env production
+#   npx wrangler d1 create kilat-production
+#   npx wrangler r2 bucket create kilat-avatars-production
+#   npx wrangler kv namespace create SESSION_KV --env production
+
+[env.staging]
+name = "kilat-staging"
+
+[env.staging.vars]
+NODE_ENV = "production"
+SSR = "true"
+MAIL_DRIVER = "log"
+MAIL_FROM = "no-reply@staging.example.com"
+
+[env.staging.observability]
+enabled = true
+head_sampling_rate = 1
+
+# Per-env bindings — create separate resources for each environment:
+#   npx wrangler kv namespace create RATE_LIMIT_KV --env staging
+#   npx wrangler d1 create kilat-staging
+#   npx wrangler r2 bucket create kilat-avatars-staging
+#   npx wrangler kv namespace create SESSION_KV --env staging
+[[env.staging.kv_namespaces]]
+binding = "RATE_LIMIT_KV"
+id = "YOUR_STAGING_KV_ID"
+
+[[env.staging.kv_namespaces]]
+binding = "SESSION_KV"
+id = "YOUR_STAGING_SESSION_KV_ID"
+
+[[env.staging.d1_databases]]
+binding = "DB"
+database_id = "YOUR_STAGING_D1_ID"
+database_name = "kilat-staging"
+migrations_dir = "migrations"
+
+[[env.staging.r2_buckets]]
+binding = "AVATARS"
+bucket_name = "kilat-avatars-staging"
+
+[env.production]
+name = "kilat"
+
+[env.production.vars]
+NODE_ENV = "production"
+SSR = "true"
+MAIL_DRIVER = "resend"
+MAIL_FROM = "no-reply@example.com"
+
+[env.production.observability]
+enabled = true
+head_sampling_rate = 0.1
+
+[[env.production.kv_namespaces]]
+binding = "RATE_LIMIT_KV"
+id = "YOUR_PRODUCTION_KV_ID"
+
+[[env.production.kv_namespaces]]
+binding = "SESSION_KV"
+id = "YOUR_PRODUCTION_SESSION_KV_ID"
+
+[[env.production.d1_databases]]
+binding = "DB"
+database_id = "YOUR_PRODUCTION_D1_ID"
+database_name = "kilat-production"
+migrations_dir = "migrations"
+
+[[env.production.r2_buckets]]
+binding = "AVATARS"
+bucket_name = "kilat-avatars-production"

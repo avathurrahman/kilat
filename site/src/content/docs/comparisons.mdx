@@ -21,7 +21,7 @@ code you own**, not a framework you depend on.
 | Rendering | Inertia v3 + in-process SSR | Framework rendering pipeline |
 | Database | D1, raw prepared statements | ORM / adapter layer |
 | Deploy | `wrangler deploy` | Platform-specific (Vercel, etc.) |
-| Lock-in | None — it's your code | Framework opinions + platform |
+| Free to start | ✅ [Yes](/limits/) — 100K req/day, 500 MB D1 | ⚠️ Vercel/Netlify free tier is 100K req/**month** |
 
 The tradeoff: meta-frameworks handle more for you, but you learn *their*
 abstractions. Kilat handles less, but what's there is plain TypeScript you can
@@ -30,12 +30,12 @@ internals.
 
 ## Kilat vs Dulak
 
-[Dulak](https://github.com/maulanashalihin/dulak) is the Bun version of the
-same philosophy. Same deliberately-boring, zero-ops ethos; different runtime
-forces different tradeoffs:
+[Dulak](https://dulak.pages.dev) is the Bun version of the same philosophy.
+Same deliberately-boring, zero-ops ethos; different runtime forces different
+tradeoffs:
 
 | | Kilat | Dulak |
-| --- | --- | --- |
+ | --- | --- | --- |
 | Runtime | Cloudflare Workers (serverless edge) | Bun (single process) |
 | Database | D1 (async SQLite at the edge) | `bun:sqlite` (sync, local) |
 | Password hashing | PBKDF2 / Web Crypto (100K cap) | argon2 |
@@ -45,15 +45,27 @@ forces different tradeoffs:
 | Rate limiting | no-op stub (stateless isolates) | in-memory Map |
 | Uploads | not included | tus-based uploads |
 | Compression | Wrangler auto-compresses | custom compress middleware |
+| CPU time limit | 10 ms (free) / 5 min (paid) | Unlimited |
+| Request limit | 100K/day (free) | Unlimited |
+| Database size | 500 MB (free) / 10 GB (paid) | Unlimited (disk-bound) |
 
-Pick Kilat if you want zero ops and global edge latency. Pick Dulak if you want
-a single long-lived process, sync DB access, and argon2.
+Pick Kilat if you want zero ops and global edge latency. Pick Dulak if you
+want a single long-lived process, sync DB access, argon2, and **no platform
+limits** — unlimited requests, unlimited CPU time, unlimited database size.
+
+Already running Kilat and hitting the free tier limits? The
+[Migrating from Kilat to Dulak](/blog/migrating-to-dulak/) guide walks
+through every step — and includes a copy-paste prompt you can give your
+AI agent to automate the whole migration.
 
 ## Kilat vs Laravel
 
-Laravel is the gold standard for batteries-included PHP web apps. Kilat brings
-the same "it just works" ergonomics — auth, sessions, CSRF, migrations, mail —
-to TypeScript on the edge:
+Laravel is the gold standard for batteries-included PHP web apps. It's also
+a time capsule from 2011: install PHP, install Composer, install a web
+server, install a database server, configure PHP-FPM, tune your worker
+processes, set up Nginx, manage SSL certs, and *then* run `php artisan
+serve`. Kilat brings the same "it just works" ergonomics — auth, sessions,
+CSRF, migrations, mail — to TypeScript on the edge, minus the archaeology:
 
 | | Kilat | Laravel |
 | --- | --- | --- |
@@ -61,8 +73,18 @@ to TypeScript on the edge:
 | Runtime | Cloudflare Workers (edge) | PHP-FPM / Octane |
 | Database | D1 (SQLite at the edge) | MySQL / Postgres |
 | ORM | none — raw prepared statements | Eloquent |
-| Deploy | `wrangler deploy` | Server + web server |
+| Deploy | `wrangler deploy` | Server + web server + PHP + Composer |
 | Latency | 300+ edge locations | Single region |
+| Setup | `npm create kilat` → running | Install PHP, Composer, web server, DB |
+| Cold start | Sub-millisecond | ~250 ms (PHP-FPM worker spin-up) |
+| Monthly cost (paid) | $5 (Workers Paid) | VPS ($5–20) + DB ($0–30) |
+| Free to start | ✅ Yes — [100K req/day, 500 MB D1](/limits/) | ❌ No — need a server + database from day one |
+| Things to install | Bun (1 thing) | PHP + Composer + web server + DB server |
+
+Laravel gives you more batteries — queues, jobs, broadcasting, Eloquent
+relationships, Blade components, a massive ecosystem. Kilat gives you fewer,
+but what's there runs at the edge with zero ops. You can learn Laravel's
+conventions, or you can read Kilat end to end in an afternoon.
 
 ## Why no ORM
 

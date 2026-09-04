@@ -89,6 +89,7 @@ function help() {
 \x1b[1mOptions:\x1b[0m
   --help, -h          Show this help
   --no-install        Skip running bun install
+  --remote            Create remote KV + R2 bindings after scaffold
   --template <name>   Skip prompts, use template directly
                       \x1b[2m${ALL_TEMPLATES.map((t) => t.name).join(" | ")}\x1b[0m
 
@@ -100,9 +101,9 @@ function help() {
   svelte-tailwind    Svelte 5 + Tailwind CSS v4
   vue-tailwind       Vue 3 + Tailwind CSS v4
 
-\x1b[1mExamples:\x1b[0m
   \x1b[36mbun create kilat\x1b[0m my-app
   \x1b[36mbun create kilat\x1b[0m my-app --template svelte-vanilla
+  \x1b[36mbun create kilat\x1b[0m my-app --remote --template default
   \x1b[36mbun create kilat\x1b[0m my-app --no-install
 
 \x1b[1mLinks:\x1b[0m
@@ -120,12 +121,21 @@ function runInstall(targetDir) {
     execSync("bun install", { cwd: targetDir, stdio: "inherit" });
     return true;
   } catch {
-    return false;
+    // bun not found — fall back to npm.
+    try {
+      console.log('\x1b[33m! bun not found, falling back to npm install...\x1b[0m');
+      execSync("npm install", { cwd: targetDir, stdio: "inherit" });
+      console.log('\x1b[33m! Installed with npm. Install bun for faster installs: https://bun.sh\x1b[0m');
+      return true;
+    } catch {
+      return false;
+    }
   }
 }
 
-/** Update wrangler.toml: rename the Worker and reset the D1 database_id
- *  so the user creates their own. */
+/** Update wrangler.toml: rename the Worker and reset all binding IDs
+ *  so the user creates their own. Also resets KV namespace ID and
+ *  R2 bucket name to placeholders. */
 async function patchWrangler(targetDir, projectName) {
   const wranglerPath = join(targetDir, "wrangler.toml");
   if (!existsSync(wranglerPath)) return;
@@ -142,6 +152,108 @@ async function patchWrangler(targetDir, projectName) {
     'database_id = "YOUR_D1_DATABASE_ID"',
   );
 
+  // Reset KV namespace ID — created by createBindings or manually.
+  content = content.replace(
+    /^id = "YOUR_KV_NAMESPACE_ID"/m,
+    'id = "YOUR_KV_NAMESPACE_ID"',
+  );
+
+  // Reset R2 bucket name to use the project name.
+  content = content.replace(
+    /^bucket_name = ".*"/m,
+    `bucket_name = "${projectName}-avatars"`,
+  );
+
+  await writeFile(wranglerPath, content);
+}
+
+/** Check if wrangler is authenticated. Returns true if logged in. */
+function isWranglerAuthenticated(targetDir) {
+  try {
+    execSync("npx wrangler whoami", {
+      encoding: "utf8",
+      cwd: targetDir,
+      stdio: ["pipe", "pipe", "pipe"],
+      timeout: 10000,
+    });
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+/** Create remote KV namespace and R2 bucket, then patch wrangler.toml
+ *  with the real IDs. Runs only when --remote flag is passed.
+ *  R2 will fail gracefully if not enabled on the Cloudflare account. */
+async function createBindings(targetDir, projectName) {
+  const wranglerPath = join(targetDir, "wrangler.toml");
+  if (!existsSync(wranglerPath)) return;
+  let content = await readFile(wranglerPath, "utf8");
+
+  // Check if wrangler is authenticated before attempting remote operations.
+  if (!isWranglerAuthenticated(targetDir)) {
+    console.log('\x1b[33m! Wrangler is not authenticated. Run "npx wrangler login" first, then re-run with --remote.\x1b[0m');
+    console.log('\x1b[2m  Skipping remote KV + R2 creation. You can do this manually after login.\x1b[0m');
+    await writeFile(wranglerPath, content);
+    return;
+  }
+
+  // KV namespace — required for rate limiting.
+  // Wrangler doesn't support --json for kv namespace create, so we parse
+  // the plain text output which contains: "id = <namespace_id>"
+  try {
+    const kvResult = execSync(
+      "npx wrangler kv namespace create RATE_LIMIT_KV",
+      { encoding: "utf8", cwd: targetDir, stdio: ["pipe", "pipe", "pipe"] },
+    );
+    // Output contains: "id = <namespace_id>"
+    const idMatch = kvResult.match(/id\s*=\s*([a-f0-9]+)/i);
+    const kvId = idMatch?.[1];
+    if (kvId) {
+      content = content.replace(
+        /^id = "YOUR_KV_NAMESPACE_ID"/m,
+        `id = "${kvId}"`,
+      );
+      console.log(`\x1b[36m✓\x1b[0m Created KV namespace RATE_LIMIT_KV (${kvId})`);
+    } else {
+      throw new Error("Could not parse KV namespace ID");
+    }
+  } catch {
+    // Namespace may already exist — try listing to find the ID.
+    try {
+      const listResult = execSync(
+        "npx wrangler kv namespace list",
+        { encoding: "utf8", cwd: targetDir, stdio: ["pipe", "pipe", "pipe"] },
+      );
+      // List output is JSON array: [{"title":"RATE_LIMIT_KV","id":"..."}]
+      const namespaces = JSON.parse(listResult);
+      const existing = namespaces.find((ns) => ns.title === "RATE_LIMIT_KV");
+      if (existing?.id) {
+        content = content.replace(
+          /^id = "YOUR_KV_NAMESPACE_ID"/m,
+          `id = "${existing.id}"`,
+        );
+        console.log(`\x1b[36m✓\x1b[0m Using existing KV namespace RATE_LIMIT_KV (${existing.id})`);
+      } else {
+        console.log('\x1b[33m! KV namespace not found. Run "npx wrangler kv namespace create RATE_LIMIT_KV" manually.\x1b[0m');
+      }
+    } catch {
+      console.log('\x1b[33m! KV namespace creation failed. Run "npx wrangler kv namespace create RATE_LIMIT_KV" manually.\x1b[0m');
+    }
+  }
+
+  // R2 bucket — optional, fails gracefully if R2 not enabled on account.
+  try {
+    execSync(
+      `npx wrangler r2 bucket create ${projectName}-avatars`,
+      { stdio: "inherit", cwd: targetDir },
+    );
+    console.log(`\x1b[36m✓\x1b[0m Created R2 bucket ${projectName}-avatars`);
+  } catch {
+    console.log('\x1b[33m! R2 bucket creation failed. Enable R2 at https://dash.cloudflare.com → R2, then run:\x1b[0m');
+    console.log(`\x1b[2m  npx wrangler r2 bucket create ${projectName}-avatars\x1b[0m`);
+  }
+
   await writeFile(wranglerPath, content);
 }
 
@@ -154,6 +266,7 @@ async function main() {
   }
 
   const noInstall = args.includes("--no-install");
+  const remote = args.includes("--remote");
   const templateFlag = args.indexOf("--template");
   const templateName = templateFlag !== -1 ? args[templateFlag + 1] : null;
 
@@ -295,10 +408,9 @@ async function main() {
     console.log("\x1b[36m↓\x1b[0m Installing dependencies with bun...");
     const ok = runInstall(targetDir);
     if (!ok) {
-      console.log('\x1b[33m! bun install failed. Run "bun install" manually.\x1b[0m');
+      console.log('\x1b[33m! Install failed. Run "npm install" or install bun: https://bun.sh\x1b[0m');
     }
   }
-
   // Auto-migrate local D1 so the app is ready to `bun run dev` immediately.
   console.log("\x1b[36m✓\x1b[0m Applying D1 migrations (local)...");
   try {
@@ -310,6 +422,12 @@ async function main() {
     console.log('\x1b[33m! Migration failed. Run "bun run db:migrate" manually.\x1b[0m');
   }
 
+  // Create remote KV + R2 bindings when --remote is passed.
+  if (remote) {
+    console.log("\x1b[36m✓\x1b[0m Creating remote bindings (KV + R2)...");
+    await createBindings(targetDir, projectName);
+  }
+
   // Success message + next steps.
   clack.outro(`Kilat project created!  ${template.label}`);
 
@@ -317,6 +435,13 @@ async function main() {
   console.log("\x1b[1mNext steps:\x1b[0m");
   console.log("  \x1b[36mbun\x1b[0m run build         \x1b[2m# build client assets + SSR bundle\x1b[0m");
   console.log("  \x1b[36mbun\x1b[0m dev               \x1b[2m# start wrangler dev server\x1b[0m");
+  console.log("  \x1b[36mbun\x1b[0m run test           \x1b[2m# run test suite (--isolate)\x1b[0m");
+  console.log("  \x1b[36mbun\x1b[0m run typecheck      \x1b[2m# tsc --noEmit\x1b[0m");
+  if (!remote) {
+    console.log();
+    console.log("\x1b[2mTo deploy: bun run build && wrangler deploy\x1b[0m");
+    console.log("\x1b[2m  Create remote bindings first: npx create-kilat <name> --remote\x1b[0m");
+  }
   console.log();
   console.log("\x1b[2mGitHub: https://github.com/maulanashalihin/kilat\x1b[0m");
 }

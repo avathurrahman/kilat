@@ -6,13 +6,14 @@
   "scripts": {
     "dev": "astro dev",
     "build": "astro build",
-    "preview": "astro preview"
+    "preview": "astro preview",
+    "deploy": "wrangler pages deploy dist --project-name kilatjs --branch kilatjs"
   },
   "dependencies": {
     "@astrojs/mdx": "^7.0.5",
     "@astrojs/starlight": "^0.41.6",
     "@resvg/resvg-js": "^2.6.2",
-    "astro": "^7.1.6",
+    "astro": "7.1.6",
     "satori": "^0.29.0",
     "starlight-blog": "^0.28.0"
   }
